@@ -1,0 +1,11 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS"
+  },
+  "deploy": {
+    "startCommand": "gunicorn mon_hotel_backend.wsgi --workers 2 --bind 0.0.0.0:$PORT",
+    "healthcheckPath": "/api/",
+    "restartPolicyType": "ON_FAILURE"
+  }
+}
