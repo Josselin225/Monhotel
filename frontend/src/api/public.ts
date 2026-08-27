@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const publicApi = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
 })
 
 export interface PublicRoomType {
@@ -111,6 +111,6 @@ export async function cancelMyBooking(reference: string, contact: string): Promi
 }
 
 export function myBookingInvoiceUrl(reference: string, contact: string): string {
-  const base = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+  const base = import.meta.env.VITE_API_URL || '/api'
   return `${base}/public/my-booking/${reference}/invoice/?contact=${encodeURIComponent(contact)}`
 }

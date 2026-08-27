@@ -34,7 +34,7 @@ export interface SurveyStats {
   }
 }
 
-const PUBLIC_BASE = `${import.meta.env.VITE_API_URL ?? 'http://localhost:8000'}/api`
+const PUBLIC_BASE = `${import.meta.env.VITE_API_URL ?? ''}/api`
 
 export const satisfactionApi = {
   list: async (params?: Record<string, string>) => {

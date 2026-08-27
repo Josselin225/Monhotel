@@ -1,7 +1,7 @@
 import axios from 'axios'
 import api from './client'
 
-const PUBLIC_BASE = `${import.meta.env.VITE_API_URL ?? 'http://localhost:8000'}/api`
+const PUBLIC_BASE = `${import.meta.env.VITE_API_URL ?? ''}/api`
 
 // Clé de session anonyme, réinitialisée à chaque fermeture d'onglet
 let _sk = sessionStorage.getItem('_sk') ?? ''

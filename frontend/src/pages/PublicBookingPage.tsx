@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { getContent } from '../api/content'
 
-const api = axios.create({ baseURL: (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000/api' })
+const api = axios.create({ baseURL: (import.meta as any).env?.VITE_API_URL || '/api' })
 
 interface AvailableRoom {
   id: number
