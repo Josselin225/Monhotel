@@ -58,12 +58,15 @@ INSTALLED_APPS = [
     'apps.tracking',
     'apps.inventory',
     'apps.scheduling',
+    'apps.rfid',
+    'apps.amenities',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'corsheaders.middleware.CorsMiddleware',
+    'mon_hotel_backend.middleware.CookieOriginCheckMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -144,7 +147,7 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ),
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'DEFAULT_PAGINATION_CLASS': 'mon_hotel_backend.pagination.DefaultPagination',
     'PAGE_SIZE': 20,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_THROTTLE_CLASSES': [
@@ -152,9 +155,15 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '60/hour',
+        # Limite par défaut pour tout endpoint anonyme SANS throttle_classes dédié
+        # (contenu du site, témoignages, suivi de visite, menu public, etc.) —
+        # simple navigation sur le site public, pas un point sensible. Les actions
+        # à risque (connexion, inscription hôtel, réservation, recherche) ont déjà
+        # leur propre limite plus stricte ci-dessous, qui remplace celle-ci.
+        'anon': '1000/hour',
         'user': '1000/hour',
         'login': '10/hour',
+        'hotel_register': '5/hour',
         'public_booking': '5/hour',
         'public_search': '30/hour',
         'my_booking': '20/hour',

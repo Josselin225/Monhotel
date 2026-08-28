@@ -4,15 +4,14 @@ from .models import MaintenanceTicket, Technician
 
 class TechnicianSerializer(serializers.ModelSerializer):
     specialty_display = serializers.CharField(source='get_specialty_display', read_only=True)
-    tickets_count     = serializers.SerializerMethodField()
+    # Alimenté par l'annotation Count('tickets') du queryset (évite un N+1 par technicien) ;
+    # `default=0` couvre l'instance fraîchement créée (hors queryset annoté).
+    tickets_count     = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model  = Technician
         fields = '__all__'
         read_only_fields = ['created_at']
-
-    def get_tickets_count(self, obj):
-        return obj.tickets.count()
 
 
 class MaintenanceTicketSerializer(serializers.ModelSerializer):

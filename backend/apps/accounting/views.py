@@ -5,7 +5,7 @@ from decimal import Decimal
 from datetime import date, timedelta
 from dateutil.relativedelta import relativedelta
 
-from django.db.models import Sum, Q
+from django.db.models import Sum
 from django.http import HttpResponse
 from django.utils import timezone
 
@@ -279,17 +279,22 @@ class BudgetViewSet(HotelScopeMixin, viewsets.ModelViewSet):
         hotel = self.get_hotel()
 
         budgets = self.get_queryset().filter(year=year, month=month)
+
+        # Dépenses du mois groupées par catégorie en une seule requête,
+        # au lieu d'une requête par budget.
+        spent_qs = Transaction.objects.filter(
+            type=Transaction.Type.EXPENSE, date__year=year, date__month=month,
+        )
+        if hotel is not None:
+            spent_qs = spent_qs.filter(hotel=hotel)
+        spent_by_category = {
+            row['category']: row['total'] or Decimal('0')
+            for row in spent_qs.values('category').annotate(total=Sum('amount'))
+        }
+
         result  = []
         for b in budgets:
-            spent_qs = Transaction.objects.filter(
-                category=b.category,
-                type=Transaction.Type.EXPENSE,
-                date__year=year,
-                date__month=month,
-            )
-            if hotel is not None:
-                spent_qs = spent_qs.filter(hotel=hotel)
-            spent = spent_qs.aggregate(total=Sum('amount'))['total'] or Decimal('0')
+            spent = spent_by_category.get(b.category, Decimal('0'))
 
             pct     = float(spent / b.amount * 100) if b.amount else 0
             alert   = pct >= b.alert_pct

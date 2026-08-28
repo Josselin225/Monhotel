@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { bookingsApi, ExtraService } from '../api/bookings'
@@ -7,6 +8,7 @@ import { roomsApi, PriceCalculation } from '../api/rooms'
 import { satisfactionApi } from '../api/satisfaction'
 import { Booking, Client, Room, RoomType } from '../types'
 import { BOOKING_STATUS_COLORS, formatDate, formatFcfa, getApiError } from '../utils'
+import { useAuth } from '../context/AuthContext'
 import Pagination from '../components/Pagination'
 import FormField from '../components/FormField'
 import PageHeader from '../components/PageHeader'
@@ -63,6 +65,8 @@ const EXTRA_CATEGORIES = [
 const EMPTY_EXTRA = { category: 'other', description: '', amount: '', quantity: '1', date: '' }
 
 export default function BookingsPage() {
+  const { user } = useAuth()
+  const isManager = user?.role === 'admin' || user?.role === 'manager'
   const [bookings, setBookings]   = useState<Booking[]>([])
   const [clients, setClients]     = useState<Client[]>([])
   const [rooms, setRooms]         = useState<Room[]>([])
@@ -231,11 +235,6 @@ export default function BookingsPage() {
     } catch (err) { toast.error(getApiError(err)) }
   }
 
-  const selectedRoomType = (() => {
-    const room = rooms.find(r => String(r.id) === form.room)
-    return room ? roomTypes.find(t => t.id === room.room_type) ?? null : null
-  })()
-
   const onRoomSelect = (roomId: string) => {
     const room = rooms.find(r => String(r.id) === roomId)
     const rt   = room ? roomTypes.find(t => t.id === room.room_type) : null
@@ -340,12 +339,16 @@ export default function BookingsPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-700 font-medium">{total} réservation{total > 1 ? 's' : ''}</p>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={handleExportCsv} className="btn-secondary flex items-center gap-2 text-sm">
-              <i className="bi bi-download" /> <span className="hidden sm:inline">Export</span> CSV
-            </button>
-            <button onClick={handleExportXlsx} className="btn-secondary flex items-center gap-2 text-sm text-emerald-700 hover:text-emerald-800">
-              <i className="bi bi-file-earmark-excel" /> <span className="hidden sm:inline">Export</span> Excel
-            </button>
+            {isManager && (
+              <>
+                <button onClick={handleExportCsv} className="btn-secondary flex items-center gap-2 text-sm">
+                  <i className="bi bi-download" /> <span className="hidden sm:inline">Export</span> CSV
+                </button>
+                <button onClick={handleExportXlsx} className="btn-secondary flex items-center gap-2 text-sm text-emerald-700 hover:text-emerald-800">
+                  <i className="bi bi-file-earmark-excel" /> <span className="hidden sm:inline">Export</span> Excel
+                </button>
+              </>
+            )}
             <button onClick={openCreate} className="btn-primary flex items-center gap-2 text-sm">
               <i className="bi bi-plus-lg" /> <span className="hidden sm:inline">Nouvelle</span> réservation
             </button>
@@ -411,7 +414,7 @@ export default function BookingsPage() {
       </div>
 
       {/* Bulk action toolbar */}
-      {selectedIds.size > 0 && (
+      {isManager && selectedIds.size > 0 && (
         <div className="mb-3 px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-3 flex-wrap">
           <span className="text-sm font-medium text-amber-800">
             <i className="bi bi-check2-square me-1" />{selectedIds.size} sélectionnée{selectedIds.size > 1 ? 's' : ''}
@@ -489,6 +492,7 @@ export default function BookingsPage() {
                       )}
                       {b.status === 'confirmed'    && <button onClick={() => handleCheckIn(b.id)}    className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors font-medium">Check-in</button>}
                       {b.status === 'checked_in'  && <button onClick={() => handleCheckOut(b.id)}   className="text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors font-medium">Check-out</button>}
+                      {b.status === 'checked_in'  && <Link to={`/app/rfid?booking=${b.id}`} title="Attribuer une carte RFID" className="text-xs px-2 py-1 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors font-medium"><i className="bi bi-credit-card-2-front" /></Link>}
                       {b.status === 'checked_out' && b.client_detail?.email && (
                         <button onClick={() => handleSendSurvey(b.id)} title="Questionnaire satisfaction" className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-medium">
                           <i className="bi bi-emoji-smile" />
@@ -499,7 +503,7 @@ export default function BookingsPage() {
                         <i className="bi bi-bag-plus" />
                       </button>
                       <button onClick={() => openEdit(b)}        className="btn-secondary text-xs px-2 py-1"><i className="bi bi-pencil" /></button>
-                      <button onClick={() => handleDelete(b.id)} className="btn-danger text-xs px-2 py-1"><i className="bi bi-trash" /></button>
+                      {isManager && <button onClick={() => handleDelete(b.id)} className="btn-danger text-xs px-2 py-1"><i className="bi bi-trash" /></button>}
                     </div>
                   </td>
                 </tr>
@@ -585,6 +589,7 @@ export default function BookingsPage() {
                     )}
                     {b.status === 'confirmed'   && <button onClick={() => handleCheckIn(b.id)}  className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors font-medium">Check-in</button>}
                     {b.status === 'checked_in'  && <button onClick={() => handleCheckOut(b.id)} className="text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded-lg hover:bg-orange-200 transition-colors font-medium">Check-out</button>}
+                    {b.status === 'checked_in'  && <Link to={`/app/rfid?booking=${b.id}`} title="Attribuer une carte RFID" className="text-xs px-2 py-1 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 transition-colors font-medium"><i className="bi bi-credit-card-2-front" /></Link>}
                     {b.status === 'checked_out' && b.client_detail?.email && (
                       <button onClick={() => handleSendSurvey(b.id)} title="Questionnaire satisfaction" className="text-xs px-2 py-1 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors font-medium">
                         <i className="bi bi-emoji-smile" />
@@ -595,7 +600,7 @@ export default function BookingsPage() {
                       <i className="bi bi-bag-plus" />
                     </button>
                     <button onClick={() => openEdit(b)}        className="btn-secondary text-xs px-2 py-1"><i className="bi bi-pencil" /></button>
-                    <button onClick={() => handleDelete(b.id)} className="btn-danger text-xs px-2 py-1"><i className="bi bi-trash" /></button>
+                    {isManager && <button onClick={() => handleDelete(b.id)} className="btn-danger text-xs px-2 py-1"><i className="bi bi-trash" /></button>}
                   </div>
                 </div>
               ))}

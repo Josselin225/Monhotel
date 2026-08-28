@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from .models import User
-from .serializers import UserSerializer, MeSerializer, UserCreateSerializer, UserUpdateSerializer, ChangePasswordSerializer
+from .serializers import UserSerializer, MeSerializer, UserUpdateSerializer, ChangePasswordSerializer
 from .permissions import IsAdmin
 from . import twofactor
 from apps.tenants.mixins import HotelScopeMixin
@@ -77,15 +77,14 @@ class ChangePasswordView(APIView):
         return Response({'detail': 'Mot de passe modifié avec succès.'})
 
 
-class UserListCreateView(HotelScopeMixin, generics.ListCreateAPIView):
-    """Liste et création d'utilisateurs — admin uniquement (cloisonné par hôtel)."""
+class UserListCreateView(HotelScopeMixin, generics.ListAPIView):
+    """Liste des utilisateurs — admin uniquement (cloisonné par hôtel).
+    La création se fait exclusivement via EmployeeViewSet.create_account : un compte
+    de connexion est toujours rattaché à une fiche employé (Planning personnel ›
+    Employés), jamais créé seul — voir apps/scheduling/views.py."""
     queryset = User.objects.all().order_by('role', 'username')
+    serializer_class = UserSerializer
     permission_classes = [IsAdmin]
-
-    def get_serializer_class(self):
-        if self.request.method == 'POST':
-            return UserCreateSerializer
-        return UserSerializer
 
 
 class UserDetailView(HotelScopeMixin, generics.RetrieveUpdateDestroyAPIView):

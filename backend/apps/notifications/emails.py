@@ -9,13 +9,31 @@ Configuration dans settings.py :
 
 En développement, EMAIL_BACKEND = console affiche les e-mails dans le terminal.
 """
+from email.utils import formataddr, parseaddr
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
 
 
-HOTEL_NAME = getattr(settings, 'HOTEL_NAME', 'Mon Hôtel')
-FROM_EMAIL  = settings.DEFAULT_FROM_EMAIL
+_DEFAULT_HOTEL_NAME = getattr(settings, 'HOTEL_NAME', 'Mon Hôtel')
+_, _TECH_ADDRESS = parseaddr(settings.DEFAULT_FROM_EMAIL)
+
+
+def _hotel_name():
+    """Nom de l'hôtel tel qu'enregistré dans Page d'accueil → Hôtel (SiteContent),
+    affiché comme nom d'expéditeur au lieu du nom générique par défaut."""
+    try:
+        from apps.content.models import SiteContent
+        name = SiteContent.get_content().data.get('hotel', {}).get('name')
+        return name or _DEFAULT_HOTEL_NAME
+    except Exception:
+        return _DEFAULT_HOTEL_NAME
+
+
+def _from_email(hotel_name):
+    # L'adresse technique reste celle authentifiée auprès du fournisseur SMTP ;
+    # seul le nom affiché change pour refléter l'hôtel qui utilise l'appli.
+    return formataddr((hotel_name, _TECH_ADDRESS or settings.DEFAULT_FROM_EMAIL))
 
 
 def _fmt_date(d):
@@ -33,35 +51,6 @@ def _fmt_fcfa(n):
         return f"{n} FCFA"
 
 
-# ─── Confirmation de réservation ─────────────────────────────────────────────
-
-def send_booking_confirmation(booking):
-    """Envoyé au client dès que la réservation est confirmée."""
-    client = booking.client
-    if not client.email:
-        return
-    subject = f"[{HOTEL_NAME}] Confirmation de votre réservation {booking.reference}"
-    body = f"""Bonjour {client.first_name},
-
-Votre réservation a bien été confirmée. Voici le récapitulatif :
-
-  Référence     : {booking.reference}
-  Chambre       : #{booking.room.number} — {booking.room.room_type.name}
-  Arrivée       : {_fmt_date(booking.check_in)}
-  Départ        : {_fmt_date(booking.check_out)}
-  Durée         : {booking.nights} nuit(s)
-  Montant total : {_fmt_fcfa(booking.total_price)}
-
-Nous vous attendons avec plaisir.
-
-L'équipe {HOTEL_NAME}
-"""
-    try:
-        send_mail(subject, body, FROM_EMAIL, [client.email], fail_silently=True)
-    except Exception:
-        pass
-
-
 # ─── Rappel d'arrivée (J-1) ──────────────────────────────────────────────────
 
 def send_arrival_reminder(booking):
@@ -69,7 +58,8 @@ def send_arrival_reminder(booking):
     client = booking.client
     if not client.email:
         return
-    subject = f"[{HOTEL_NAME}] Rappel — votre arrivée demain ({_fmt_date(booking.check_in)})"
+    hotel_name = _hotel_name()
+    subject = f"{hotel_name} — Rappel — votre arrivée demain ({_fmt_date(booking.check_in)})"
     body = f"""Bonjour {client.first_name},
 
 Nous vous rappelons que votre séjour commence demain.
@@ -82,10 +72,10 @@ Notre équipe sera ravie de vous accueillir. En cas de besoin,
 contactez-nous directement.
 
 À demain !
-L'équipe {HOTEL_NAME}
+L'équipe {hotel_name}
 """
     try:
-        send_mail(subject, body, FROM_EMAIL, [client.email], fail_silently=True)
+        send_mail(subject, body, _from_email(hotel_name), [client.email], fail_silently=True)
     except Exception:
         pass
 
@@ -97,7 +87,8 @@ def send_invoice(invoice):
     client = invoice.booking.client
     if not client.email:
         return
-    subject = f"[{HOTEL_NAME}] Votre facture {invoice.number}"
+    hotel_name = _hotel_name()
+    subject = f"{hotel_name} — Votre facture {invoice.number}"
     body = f"""Bonjour {client.first_name},
 
 Veuillez trouver ci-dessous le récapitulatif de votre facture.
@@ -112,10 +103,10 @@ Veuillez trouver ci-dessous le récapitulatif de votre facture.
 
 Merci de votre confiance et au plaisir de vous accueillir à nouveau.
 
-L'équipe {HOTEL_NAME}
+L'équipe {hotel_name}
 """
     try:
-        send_mail(subject, body, FROM_EMAIL, [client.email], fail_silently=True)
+        send_mail(subject, body, _from_email(hotel_name), [client.email], fail_silently=True)
     except Exception:
         pass
 
@@ -126,20 +117,21 @@ def send_birthday_greeting(client):
     """Envoyé le jour de l'anniversaire d'un client."""
     if not client.email:
         return
-    subject = f"[{HOTEL_NAME}] Joyeux anniversaire, {client.first_name} ! 🎂"
+    hotel_name = _hotel_name()
+    subject = f"{hotel_name} — Joyeux anniversaire, {client.first_name} ! 🎂"
     body = f"""Bonjour {client.first_name},
 
-Toute l'équipe de {HOTEL_NAME} vous souhaite un très joyeux anniversaire !
+Toute l'équipe de {hotel_name} vous souhaite un très joyeux anniversaire !
 
 En cette occasion spéciale, sachez que nous serions ravis de vous accueillir
 pour un séjour mémorable. Contactez-nous pour connaître nos offres exclusives.
 
 Encore une fois, joyeux anniversaire !
 
-L'équipe {HOTEL_NAME}
+L'équipe {hotel_name}
 """
     try:
-        send_mail(subject, body, FROM_EMAIL, [client.email], fail_silently=True)
+        send_mail(subject, body, _from_email(hotel_name), [client.email], fail_silently=True)
     except Exception:
         pass
 
@@ -154,10 +146,11 @@ def send_satisfaction_survey(survey):
     from django.conf import settings as _settings
     frontend_url = getattr(_settings, 'FRONTEND_URL', 'http://localhost:5173')
     link = f"{frontend_url}/survey/{survey.token}"
-    subject = f"[{HOTEL_NAME}] Votre avis sur votre séjour ({survey.booking.reference})"
+    hotel_name = _hotel_name()
+    subject = f"{hotel_name} — Votre avis sur votre séjour ({survey.booking.reference})"
     body = f"""Bonjour {client.first_name},
 
-Votre séjour au {HOTEL_NAME} est terminé. Nous espérons que vous avez passé un excellent moment !
+Votre séjour au {hotel_name} est terminé. Nous espérons que vous avez passé un excellent moment !
 
 Nous vous serions reconnaissants de bien vouloir nous faire part de votre avis en quelques minutes :
 
@@ -167,10 +160,10 @@ Votre retour nous aide à nous améliorer continuellement.
 
 Merci et à bientôt !
 
-L'équipe {HOTEL_NAME}
+L'équipe {hotel_name}
 """
     try:
-        send_mail(subject, body, FROM_EMAIL, [client.email], fail_silently=True)
+        send_mail(subject, body, _from_email(hotel_name), [client.email], fail_silently=True)
     except Exception:
         pass
 
@@ -178,7 +171,18 @@ L'équipe {HOTEL_NAME}
 # ─── Commande de rappels (à appeler depuis manage.py ou cron) ────────────────
 
 def _staff_emails():
-    """Retourne la liste des adresses destinataires staff (depuis settings)."""
+    """
+    Retourne la liste des adresses destinataires staff : l'email que l'hôtel a
+    renseigné dans Page d'accueil → Hôtel (SiteContent) en priorité, sinon la
+    liste statique STAFF_ALERT_EMAILS (settings) en repli.
+    """
+    try:
+        from apps.content.models import SiteContent
+        hotel_email = SiteContent.get_content().data.get('hotel', {}).get('email')
+        if hotel_email:
+            return [hotel_email]
+    except Exception:
+        pass
     return getattr(settings, 'STAFF_ALERT_EMAILS', []) or []
 
 
@@ -189,8 +193,9 @@ def send_new_booking_alert(booking):
     recipients = _staff_emails()
     if not recipients:
         return
+    hotel_name = _hotel_name()
     source_label = dict(getattr(booking, 'SOURCE_CHOICES', []) or []).get(booking.source, booking.source)
-    subject = f"[{HOTEL_NAME}] Nouvelle réservation — {booking.reference}"
+    subject = f"{hotel_name} — Nouvelle réservation — {booking.reference}"
     body = f"""Nouvelle réservation enregistrée dans le système.
 
   Référence     : {booking.reference}
@@ -203,10 +208,10 @@ def send_new_booking_alert(booking):
   Source        : {source_label}
   Statut        : {booking.get_status_display()}
 
-— Système {HOTEL_NAME}
+— Système {hotel_name}
 """
     try:
-        send_mail(subject, body, FROM_EMAIL, recipients, fail_silently=True)
+        send_mail(subject, body, _from_email(hotel_name), recipients, fail_silently=True)
     except Exception:
         pass
 
@@ -218,8 +223,9 @@ def send_maintenance_alert(ticket):
     recipients = _staff_emails()
     if not recipients:
         return
+    hotel_name = _hotel_name()
     room_info = f"Chambre #{ticket.room.number}" if ticket.room_id else (ticket.location or 'Non précisé')
-    subject = f"[{HOTEL_NAME}] ⚠ Ticket {ticket.get_priority_display()} — {ticket.title}"
+    subject = f"{hotel_name} — ⚠ Ticket {ticket.get_priority_display()} — {ticket.title}"
     body = f"""Un ticket de maintenance à priorité élevée vient d'être créé.
 
   Titre       : {ticket.title}
@@ -231,10 +237,10 @@ def send_maintenance_alert(ticket):
 
 Connectez-vous au système pour prendre en charge ce ticket.
 
-— Système {HOTEL_NAME}
+— Système {hotel_name}
 """
     try:
-        send_mail(subject, body, FROM_EMAIL, recipients, fail_silently=True)
+        send_mail(subject, body, _from_email(hotel_name), recipients, fail_silently=True)
     except Exception:
         pass
 
@@ -245,13 +251,13 @@ def send_survey_reminder(survey):
     if not client.email:
         return
     from django.conf import settings as _settings
-    from django.utils import timezone as tz
     frontend_url = getattr(_settings, 'FRONTEND_URL', 'http://localhost:5173')
     link = f"{frontend_url}/survey/{survey.token}"
-    subject = f"[{HOTEL_NAME}] Rappel — votre avis nous intéresse ({survey.booking.reference})"
+    hotel_name = _hotel_name()
+    subject = f"{hotel_name} — Rappel — votre avis nous intéresse ({survey.booking.reference})"
     body = f"""Bonjour {client.first_name},
 
-Il y a quelques jours, vous avez séjourné au {HOTEL_NAME}. Nous n'avons pas encore reçu votre avis.
+Il y a quelques jours, vous avez séjourné au {hotel_name}. Nous n'avons pas encore reçu votre avis.
 
 Cela ne prend que 2 minutes et nous aide beaucoup à améliorer nos services :
 
@@ -259,10 +265,10 @@ Cela ne prend que 2 minutes et nous aide beaucoup à améliorer nos services :
 
 Merci d'avance pour votre temps !
 
-L'équipe {HOTEL_NAME}
+L'équipe {hotel_name}
 """
     try:
-        send_mail(subject, body, FROM_EMAIL, [client.email], fail_silently=True)
+        send_mail(subject, body, _from_email(hotel_name), [client.email], fail_silently=True)
         survey.reminder_sent_at = timezone.now()
         survey.save(update_fields=['reminder_sent_at'])
     except Exception:

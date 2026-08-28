@@ -120,7 +120,7 @@ export default function GlobalSearch() {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKey}
-            className="flex-1 bg-transparent text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none"
+            className="flex-1 bg-transparent text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400 focus:outline-none"
           />
           <kbd className="shrink-0 text-xs bg-gray-100 text-gray-400 px-1.5 py-0.5 rounded border border-gray-200">Esc</kbd>
         </div>
@@ -139,7 +139,7 @@ export default function GlobalSearch() {
                     <i className={`bi ${r.icon} text-sm`} />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{r.label}</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{r.label}</p>
                     <p className="text-xs text-gray-400 truncate">{r.sub}</p>
                   </div>
                   <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${TYPE_COLOR[r.type]}`}>

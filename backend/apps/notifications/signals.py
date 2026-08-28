@@ -12,20 +12,6 @@ def _get_old_status(instance):
         return None
 
 
-@receiver(pre_save, sender='bookings.Booking')
-def track_booking_status(sender, instance, **kwargs):
-    instance._old_status = _get_old_status(instance)
-
-
-@receiver(post_save, sender='bookings.Booking')
-def on_booking_confirmed(sender, instance, created, **kwargs):
-    """Envoie la confirmation uniquement à la transition → 'confirmed'."""
-    old = getattr(instance, '_old_status', None)
-    if instance.status == 'confirmed' and old != 'confirmed':
-        from .emails import send_booking_confirmation
-        send_booking_confirmation(instance)
-
-
 @receiver(pre_save, sender='billing.Invoice')
 def track_invoice_status(sender, instance, **kwargs):
     instance._old_status = _get_old_status(instance)

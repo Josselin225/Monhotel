@@ -37,8 +37,8 @@ export const clientsApi = {
     const { data } = await api.get('/clients/export_xlsx/', { responseType: 'blob' })
     return data
   },
-  stats: async (): Promise<CRMStats> => {
-    const { data } = await api.get<CRMStats>('/clients/stats/')
+  stats: async (params?: Record<string, string>): Promise<CRMStats> => {
+    const { data } = await api.get<CRMStats>('/clients/stats/', { params })
     return data
   },
 

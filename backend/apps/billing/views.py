@@ -26,6 +26,14 @@ class InvoiceViewSet(HotelScopeMixin, viewsets.ModelViewSet):
             return [IsAuthenticated()]
         return [IsAdminOrManager()]
 
+    def perform_create(self, serializer):
+        self.check_related_hotel(serializer.validated_data.get('booking'), 'booking')
+        super().perform_create(serializer)
+
+    def perform_update(self, serializer):
+        self.check_related_hotel(serializer.validated_data.get('booking'), 'booking')
+        serializer.save()
+
     @action(detail=True, methods=['post'])
     def issue(self, request, pk=None):
         invoice = self.get_object()

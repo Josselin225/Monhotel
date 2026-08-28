@@ -30,9 +30,9 @@ export interface InventoryItem {
 export interface InventoryMovement {
   id: number
   reference: string
-  item: number
-  item_name: string
-  item_unit: string
+  item: number | null
+  item_name: string | null
+  item_unit: string | null
   movement_type: 'in' | 'out' | 'adjustment' | 'loss'
   movement_type_display: string
   quantity: string

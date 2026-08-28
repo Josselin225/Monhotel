@@ -5,7 +5,7 @@ from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from mon_hotel_backend.throttles import PublicBookingThrottle
+from mon_hotel_backend.throttles import PublicBookingThrottle, PublicSearchThrottle
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Count, Sum
@@ -109,8 +109,24 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
             'bookings': [],
         } for r in rooms}
 
+        # Services (restaurant, spa, etc.) réservés par les mêmes clients — une seule
+        # requête groupée, puis on ne garde que ceux qui tombent dans le séjour de chaque
+        # réservation, pour afficher un badge dans le planning sans naviguer ailleurs.
+        from collections import defaultdict
+        from apps.amenities.models import AmenityReservation
+        client_ids = {b.client_id for b in bookings}
+        amenities_by_client = defaultdict(list)
+        for row in AmenityReservation.objects.filter(client_id__in=client_ids) \
+                .exclude(status=AmenityReservation.Status.CANCELLED) \
+                .values('client_id', 'date', 'amenity'):
+            amenities_by_client[row['client_id']].append(row)
+
         for b in bookings:
             if b.room_id in room_map:
+                kinds = sorted({
+                    row['amenity'] for row in amenities_by_client.get(b.client_id, [])
+                    if b.check_in <= row['date'] < b.check_out
+                })
                 room_map[b.room_id]['bookings'].append({
                     'id': b.id,
                     'reference': b.reference,
@@ -119,6 +135,7 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
                     'check_out': b.check_out.isoformat(),
                     'status': b.status,
                     'nights': b.nights,
+                    'amenities': kinds,
                 })
 
         return Response({
@@ -129,7 +146,11 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def notifications(self, request):
-        """Arrivées et départs du jour."""
+        """Arrivées/départs du jour, plus les réservations (chambres et services)
+        encore en attente venues du site public — tant qu'un membre du personnel
+        ne les a pas traitées, elles restent listées ici."""
+        from apps.amenities.models import AmenityReservation
+
         today = timezone.now().date()
         arrivals = self.get_queryset().filter(
             check_in=today,
@@ -140,6 +161,21 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
             status=Booking.Status.CHECKED_IN,
         )
 
+        online_bookings_qs = self.get_queryset().filter(
+            status=Booking.Status.PENDING,
+            source=Booking.Source.ONLINE,
+        ).order_by('-created_at')
+        online_bookings_count = online_bookings_qs.count()
+
+        online_services_qs = AmenityReservation.objects.filter(
+            status=AmenityReservation.Status.PENDING,
+            source=AmenityReservation.Source.ONLINE,
+        ).order_by('-created_at')
+        hotel = self.get_hotel()
+        if hotel is not None:
+            online_services_qs = online_services_qs.filter(hotel=hotel)
+        online_services_count = online_services_qs.count()
+
         def fmt(b):
             return {
                 'id': b.id,
@@ -149,10 +185,22 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
                 'status': b.status,
             }
 
+        def fmt_service(r):
+            return {
+                'id': r.id,
+                'client': r.client_name,
+                'amenity': r.amenity,
+                'amenity_display': r.get_amenity_display(),
+                'date': str(r.date),
+                'start_time': str(r.start_time),
+            }
+
         return Response({
             'arrivals': [fmt(b) for b in arrivals],
             'departures': [fmt(b) for b in departures],
-            'count': arrivals.count() + departures.count(),
+            'online_bookings': [fmt(b) for b in online_bookings_qs[:20]],
+            'online_services': [fmt_service(r) for r in online_services_qs[:20]],
+            'count': arrivals.count() + departures.count() + online_bookings_count + online_services_count,
         })
 
     @action(detail=False, methods=['get'])
@@ -421,6 +469,7 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
                 self._room_queryset_for_update().filter(pk=data['room'].pk).get()
             except Room.DoesNotExist:
                 raise ValidationError({'room': 'Chambre introuvable.'})
+            self.check_related_hotel(data.get('client'), 'client')
             serializer.save(hotel=self.get_hotel())
 
     def perform_update(self, serializer):
@@ -431,6 +480,7 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
                     self._room_queryset_for_update().filter(pk=data['room'].pk).get()
                 except Room.DoesNotExist:
                     raise ValidationError({'room': 'Chambre introuvable.'})
+            self.check_related_hotel(data.get('client'), 'client')
             serializer.save()
 
     @action(detail=True, methods=['post'])
@@ -535,10 +585,26 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
         qs = self.get_queryset().filter(pk__in=ids)
 
         if bulk_action == 'delete':
-            count, _ = qs.delete()
+            from django.db.models import ProtectedError
+            try:
+                count, _ = qs.delete()
+            except ProtectedError:
+                return Response(
+                    {'detail': "Certaines réservations sélectionnées ont une facture associée et ne peuvent pas être supprimées."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         elif bulk_action in ('confirm', 'cancel'):
             new_status = 'confirmed' if bulk_action == 'confirm' else 'cancelled'
-            count = qs.exclude(status__in=['checked_out', 'checked_in']).update(status=new_status)
+            # Sauvegarde instance par instance (pas .update()) pour que le signal
+            # post_save déclenche bien l'email de confirmation, comme le fait déjà
+            # le check-in/check-out unitaire — un .update() en masse le contournerait
+            # silencieusement.
+            count = 0
+            with transaction.atomic():
+                for booking in qs.exclude(status__in=['checked_out', 'checked_in']).select_for_update():
+                    booking.status = new_status
+                    booking.save(update_fields=['status', 'updated_at'])
+                    count += 1
         elif bulk_action == 'export':
             return _export_bookings_csv(qs)
         else:
@@ -547,7 +613,7 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
         return Response({'count': count})
 
 
-    @action(detail=False, methods=['get'], permission_classes=[AllowAny])
+    @action(detail=False, methods=['get'], permission_classes=[AllowAny], throttle_classes=[PublicSearchThrottle])
     def availability(self, request):
         """
         Vérifie la disponibilité des chambres.
@@ -593,7 +659,7 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
                 'number': room.number,
                 'room_type': room.room_type.name,
                 'floor': room.floor,
-                'floor_display': room.floor_display,
+                'floor_display': room.get_floor_display(),
                 'price_per_night': price_info['price_per_night'],
                 'total_price': round(price_info['price_per_night'] * nights, 2),
                 'nights': nights,
@@ -606,7 +672,13 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
         """
         Crée une demande de réservation publique (statut pending, source online).
         POST /api/bookings/request_booking/
-        Body: { first_name, last_name, email, phone, room_id, check_in, check_out, adults, children, special_requests }
+        Body: { first_name, last_name, email, phone, room_id, check_in, check_out, adults, children,
+                special_requests, restaurant_meals, restaurant_frequency, restaurant_date,
+                restaurant_party_size }
+        restaurant_meals est une liste de {meal, time}, ex: [{"meal":"breakfast","time":"08:00"}]
+        Les champs restaurant_* sont optionnels : s'ils sont fournis, une ou plusieurs
+        réservations de table sont créées en même temps que la chambre (voir apps.amenities) —
+        une par jour du séjour si restaurant_frequency='daily', une seule si 'once'.
         """
         from apps.clients.models import Client
         from apps.rooms.models import Room
@@ -627,49 +699,106 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
         if co <= ci or ci < date.today():
             return Response({'detail': 'Dates invalides.'}, status=400)
 
-        # Vérifier la chambre
+        # Validation adults/children (comme le flux public/book/, pour éviter une
+        # ValueError non gérée -> 500 en cas de valeur non numérique).
         try:
-            room = Room.objects.select_related('room_type').get(pk=data['room_id'], status='available')
-        except Room.DoesNotExist:
-            return Response({'detail': 'Chambre non disponible.'}, status=400)
+            adults   = max(1, int(data.get('adults', 1)))
+            children = max(0, int(data.get('children', 0)))
+        except (TypeError, ValueError):
+            return Response({'detail': 'Valeurs adults/children invalides.'}, status=400)
 
-        # Vérifier disponibilité
-        conflict = Booking.objects.filter(
-            room=room, check_in__lt=co, check_out__gt=ci,
-            status__in=[Booking.Status.PENDING, Booking.Status.CONFIRMED, Booking.Status.CHECKED_IN],
-        ).exists()
-        if conflict:
-            return Response({'detail': 'Cette chambre n\'est plus disponible pour ces dates.'}, status=400)
+        # Réservation de table optionnelle, validée avant toute écriture en base.
+        MEAL_LABELS = {'breakfast': 'Petit-déjeuner', 'lunch': 'Déjeuner', 'dinner': 'Dîner'}
+        restaurant_meals_raw  = data.get('restaurant_meals') or []
+        restaurant_frequency  = data.get('restaurant_frequency')
+        wants_restaurant = bool(restaurant_meals_raw) and bool(restaurant_frequency)
+        restaurant_dates = []
+        restaurant_meal_times = []
+        if wants_restaurant:
+            from datetime import time as time_cls
+            if not isinstance(restaurant_meals_raw, list):
+                return Response({'detail': 'Repas invalides.'}, status=400)
+            for item in restaurant_meals_raw:
+                meal_key = item.get('meal') if isinstance(item, dict) else None
+                time_str = item.get('time') if isinstance(item, dict) else None
+                if meal_key not in MEAL_LABELS:
+                    return Response({'detail': 'Repas invalide.'}, status=400)
+                try:
+                    restaurant_meal_times.append((meal_key, time_cls.fromisoformat(time_str)))
+                except (TypeError, ValueError):
+                    return Response({'detail': 'Heure de réservation au restaurant invalide.'}, status=400)
+            if restaurant_frequency == 'daily':
+                restaurant_dates = [ci + timedelta(days=i) for i in range((co - ci).days)]
+            elif restaurant_frequency == 'once':
+                restaurant_date_str = data.get('restaurant_date')
+                if not restaurant_date_str:
+                    return Response({'detail': 'Date de réservation au restaurant requise.'}, status=400)
+                try:
+                    single_date = date.fromisoformat(restaurant_date_str)
+                except ValueError:
+                    return Response({'detail': 'Date de réservation au restaurant invalide.'}, status=400)
+                if single_date < date.today():
+                    return Response({'detail': 'La date de réservation au restaurant ne peut pas être dans le passé.'}, status=400)
+                restaurant_dates = [single_date]
+            else:
+                return Response({'detail': 'Fréquence de réservation au restaurant invalide.'}, status=400)
 
         # Trouver ou créer le client. On ne rattache à une fiche existante que
         # si le nom correspond (pas de preuve de possession de l'email/OTP ici).
         first_name = data['first_name'].strip()
         last_name  = data['last_name'].strip()
         email_norm = data['email'].lower().strip()
-        existing = Client.objects.filter(email=email_norm, hotel=room.hotel).first()
-        if existing and existing.first_name.strip().lower() == first_name.lower() \
-                and existing.last_name.strip().lower() == last_name.lower():
-            client = existing
-        else:
-            client = Client.objects.create(
-                hotel=room.hotel,
-                email=email_norm,
-                first_name=first_name,
-                last_name=last_name,
-                phone=data.get('phone', ''),
-            )
 
-        price_info = calculate_price(room, ci, co)
-        nights = (co - ci).days
-
+        # Vérifier la chambre + la disponibilité sous verrou, à l'intérieur de la
+        # transaction : deux requêtes quasi simultanées sur la même chambre/dates
+        # ne doivent pas pouvoir passer toutes les deux la vérification avant que
+        # l'une des deux ait committé sa création (même logique que public/book/).
         with transaction.atomic():
+            try:
+                room = Room.objects.select_related('room_type').select_for_update().get(
+                    pk=data['room_id'], status='available',
+                )
+            except (Room.DoesNotExist, ValueError, TypeError):
+                return Response({'detail': 'Chambre non disponible.'}, status=400)
+
+            capacity = room.room_type.capacity
+            if adults + children > capacity:
+                return Response({
+                    'detail': f"Cette chambre accueille au maximum {capacity} personne"
+                              f"{'s' if capacity > 1 else ''}. Réduisez le nombre de voyageurs "
+                              f"ou choisissez une chambre plus grande.",
+                }, status=400)
+
+            conflict = Booking.objects.filter(
+                room=room, check_in__lt=co, check_out__gt=ci,
+                status__in=[Booking.Status.PENDING, Booking.Status.CONFIRMED, Booking.Status.CHECKED_IN],
+            ).exists()
+            if conflict:
+                return Response({'detail': 'Cette chambre n\'est plus disponible pour ces dates.'}, status=400)
+
+            existing = Client.objects.filter(email=email_norm, hotel=room.hotel).first()
+            if existing and existing.first_name.strip().lower() == first_name.lower() \
+                    and existing.last_name.strip().lower() == last_name.lower():
+                client = existing
+            else:
+                client = Client.objects.create(
+                    hotel=room.hotel,
+                    email=email_norm,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone=data.get('phone', ''),
+                )
+
+            price_info = calculate_price(room, ci, co)
+            nights = (co - ci).days
+
             booking = Booking.objects.create(
                 client=client,
                 room=room,
                 check_in=ci,
                 check_out=co,
-                adults=int(data.get('adults', 1)),
-                children=int(data.get('children', 0)),
+                adults=adults,
+                children=children,
                 status=Booking.Status.PENDING,
                 source=Booking.Source.ONLINE,
                 price_per_night=price_info['price_per_night'],
@@ -677,9 +806,34 @@ class BookingViewSet(HotelScopeMixin, viewsets.ModelViewSet):
                 special_requests=data.get('special_requests', ''),
             )
 
+            if wants_restaurant:
+                from apps.amenities.models import AmenityReservation, AmenityType
+                try:
+                    party_size = max(1, int(data.get('restaurant_party_size') or adults))
+                except (TypeError, ValueError):
+                    party_size = adults
+                for meal_key, meal_time in restaurant_meal_times:
+                    meal_label = MEAL_LABELS[meal_key]
+                    for d in restaurant_dates:
+                        AmenityReservation.objects.create(
+                            hotel=room.hotel,
+                            amenity=AmenityType.RESTAURANT,
+                            client=client,
+                            client_name=f'{first_name} {last_name}',
+                            client_phone=data.get('phone', ''),
+                            date=d,
+                            start_time=meal_time,
+                            party_size=party_size,
+                            status=AmenityReservation.Status.PENDING,
+                            source=AmenityReservation.Source.ONLINE,
+                            notes=f'{meal_label} — réservé en ligne avec la chambre {room.number} ({booking.reference}).',
+                        )
+
         return Response({
             'reference': booking.reference,
             'total_price': booking.total_price,
+            'restaurant_reserved': wants_restaurant,
+            'restaurant_occasions': len(restaurant_dates) * len(restaurant_meal_times),
             'detail': f'Votre demande de réservation {booking.reference} a été enregistrée. Nous vous contacterons sous 24h.',
         }, status=status.HTTP_201_CREATED)
 

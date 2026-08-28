@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { bookingsApi, CalendarRoom } from '../api/bookings'
+import { AMENITY_META, AmenityType } from '../api/amenities'
 import { format, addDays, addWeeks, subWeeks, eachDayOfInterval, isSameDay, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import PageHeader from '../components/PageHeader'
@@ -341,6 +342,9 @@ export default function PlanningPage() {
                     >
                       <i className="bi bi-arrows-move text-[10px] mr-1.5 opacity-60 shrink-0" />
                       <span className="truncate font-medium">{booking.client}</span>
+                      {booking.amenities.length > 0 && (
+                        <i className="bi bi-star-fill text-[10px] ml-1.5 shrink-0" title="A réservé un service" />
+                      )}
                     </div>
                   )
                 })}
@@ -365,6 +369,12 @@ export default function PlanningPage() {
             <p>Départ : {format(parseISO(tooltip.booking.check_out), 'dd/MM/yyyy')}</p>
             <p>{tooltip.booking.nights} nuit{tooltip.booking.nights > 1 ? 's' : ''}</p>
           </div>
+          {tooltip.booking.amenities.length > 0 && (
+            <p className="mt-2 text-xs text-amber-300 flex items-center gap-1">
+              <i className="bi bi-star-fill" />
+              {tooltip.booking.amenities.map(a => AMENITY_META[a as AmenityType]?.label ?? a).join(', ')}
+            </p>
+          )}
           <div className="mt-2 flex items-center gap-2">
             <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${STATUS_COLORS[tooltip.booking.status]} text-white`}>
               {STATUS_LABELS[tooltip.booking.status] ?? tooltip.booking.status}
@@ -439,6 +449,24 @@ export default function PlanningPage() {
                   {STATUS_LABELS[selectedBooking.booking.status] ?? selectedBooking.booking.status}
                 </span>
               </div>
+
+              {/* Services réservés */}
+              {selectedBooking.booking.amenities.length > 0 && (
+                <div className="card">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Services réservés</p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedBooking.booking.amenities.map(a => {
+                      const meta = AMENITY_META[a as AmenityType]
+                      return (
+                        <span key={a} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                          <i className={`bi ${meta?.icon ?? 'bi-star-fill'}`} />
+                          {meta?.label ?? a}
+                        </span>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Chambre */}
               <div className="card">

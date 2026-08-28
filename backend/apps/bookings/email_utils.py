@@ -1,6 +1,9 @@
-from django.core.mail import send_mail
+from email.utils import formataddr, parseaddr
+from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
-from django.utils.html import strip_tags
+from django.utils.html import escape, strip_tags
+
+_, _TECH_ADDRESS = parseaddr(settings.DEFAULT_FROM_EMAIL)
 
 
 def _hotel_info():
@@ -14,6 +17,23 @@ def _hotel_info():
         }
     except Exception:
         return {'name': 'Mon Hôtel', 'email': settings.DEFAULT_FROM_EMAIL, 'phone': ''}
+
+
+def _send(subject, html, to, hotel):
+    # L'envoi technique passe par le compte SMTP partagé (adresse authentifiée),
+    # mais le nom affiché reflète l'hôtel qui utilise l'appli, et Reply-To pointe
+    # vers l'email enregistré par l'hôtel : si le client répond, ça arrive dans
+    # la boîte de l'hôtel, pas dans celle du compte technique.
+    from_email = formataddr((hotel['name'], _TECH_ADDRESS or settings.DEFAULT_FROM_EMAIL))
+    msg = EmailMultiAlternatives(
+        subject=subject,
+        body=strip_tags(html),
+        from_email=from_email,
+        to=[to],
+        reply_to=[hotel['email']],
+    )
+    msg.attach_alternative(html, 'text/html')
+    msg.send(fail_silently=True)
 
 
 def _row(label, value):
@@ -51,24 +71,17 @@ def send_booking_pending(booking):
         _row('Chambre', f'#{booking.room.number} — {booking.room.room_type.name}') +
         _row('Arrivée', booking.check_in.strftime('%d/%m/%Y')) +
         _row('Départ', booking.check_out.strftime('%d/%m/%Y')) +
-        _row('Durée', f"{booking.nights} nuit{'s' if booking.nights > 1 else ''}") +
+        _row('Durée', booking.duration_label) +
         _row('Total estimé', f"{int(booking.total_price):,} FCFA".replace(',', ' '))
     )
     body = (
-        f"<p>Bonjour {booking.client.full_name},</p>"
+        f"<p>Bonjour {escape(booking.client.full_name)},</p>"
         f"<p>Nous avons bien reçu votre demande de réservation. Notre équipe vous contactera sous 24h pour confirmer votre séjour.</p>"
         f"<table style='border-collapse:collapse;width:100%;margin:16px 0'>{rows}</table>"
         f"<p>Merci de votre confiance.</p>"
     )
     html = _wrap(hotel['name'], 'Demande de réservation reçue', body)
-    send_mail(
-        subject=f"[{hotel['name']}] Demande de réservation — {booking.reference}",
-        message=strip_tags(html),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[booking.client.email],
-        html_message=html,
-        fail_silently=True,
-    )
+    _send(f"{hotel['name']} — Demande de réservation — {booking.reference}", html, booking.client.email, hotel)
 
 
 def send_booking_confirmation(booking):
@@ -82,25 +95,18 @@ def send_booking_confirmation(booking):
         _row('Chambre', f'#{booking.room.number} — {booking.room.room_type.name}') +
         _row('Arrivée', booking.check_in.strftime('%d/%m/%Y')) +
         _row('Départ', booking.check_out.strftime('%d/%m/%Y')) +
-        _row('Durée', f"{booking.nights} nuit{'s' if booking.nights > 1 else ''}") +
+        _row('Durée', booking.duration_label) +
         _row('Total', f"{int(booking.total_price):,} FCFA".replace(',', ' '))
     )
     body = (
-        f"<p>Bonjour {booking.client.full_name},</p>"
+        f"<p>Bonjour {escape(booking.client.full_name)},</p>"
         f"<p>Votre réservation a été <strong>confirmée</strong>. Nous nous réjouissons de vous accueillir.</p>"
         f"<table style='border-collapse:collapse;width:100%;margin:16px 0'>{rows}</table>"
         f"<p>Pour toute question, n'hésitez pas à nous contacter.</p>"
         + (f"<p>📞 {hotel['phone']}</p>" if hotel['phone'] else '')
     )
     html = _wrap(hotel['name'], 'Confirmation de réservation', body)
-    send_mail(
-        subject=f"[{hotel['name']}] Confirmation — {booking.reference}",
-        message=strip_tags(html),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[booking.client.email],
-        html_message=html,
-        fail_silently=True,
-    )
+    _send(f"{hotel['name']} — Confirmation — {booking.reference}", html, booking.client.email, hotel)
 
 
 def send_arrival_reminder(booking):
@@ -115,18 +121,11 @@ def send_arrival_reminder(booking):
         _row('Arrivée', booking.check_in.strftime('%d/%m/%Y'))
     )
     body = (
-        f"<p>Bonjour {booking.client.full_name},</p>"
+        f"<p>Bonjour {escape(booking.client.full_name)},</p>"
         f"<p>Nous vous rappelons que votre séjour commence <strong>demain</strong> !</p>"
         f"<table style='border-collapse:collapse;width:100%;margin:16px 0'>{rows}</table>"
         f"<p>Notre équipe sera ravie de vous accueillir.</p>"
         + (f"<p>📞 {hotel['phone']}</p>" if hotel['phone'] else '')
     )
     html = _wrap(hotel['name'], 'Rappel : votre arrivée demain', body)
-    send_mail(
-        subject=f"[{hotel['name']}] Rappel — Votre arrivée demain",
-        message=strip_tags(html),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[booking.client.email],
-        html_message=html,
-        fail_silently=True,
-    )
+    _send(f"{hotel['name']} — Rappel — Votre arrivée demain", html, booking.client.email, hotel)

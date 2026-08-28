@@ -1,6 +1,7 @@
 """Génération du PDF de facture — partagée entre la vue admin (InvoiceViewSet.pdf)
 et le portail self-service client (public_views.py)."""
 import io
+from xml.sax.saxutils import escape as xml_escape
 from django.http import HttpResponse
 from django.utils import timezone
 from apps.content.models import SiteContent
@@ -77,16 +78,16 @@ def generate_invoice_pdf_response(invoice) -> HttpResponse:
     info_data = [
         [Paragraph('<b>CLIENT</b>', label_style), Paragraph('<b>FACTURE</b>', label_style)],
         [
-            Paragraph(f"{client.first_name} {client.last_name}<br/>"
-                      f"{client.phone or ''}<br/>"
-                      f"{client.email or ''}",
+            Paragraph(f"{xml_escape(client.first_name)} {xml_escape(client.last_name)}<br/>"
+                      f"{xml_escape(client.phone or '')}<br/>"
+                      f"{xml_escape(client.email or '')}",
                       ParagraphStyle('cli', parent=styles['Normal'], fontSize=9, textColor=dark, leading=13)),
             Paragraph(
                 f"Réservation : {b.reference}<br/>"
                 f"Chambre : #{room.number} — {room.room_type.name}<br/>"
                 f"Arrivée : {fmt_date(b.check_in)}<br/>"
                 f"Départ : {fmt_date(b.check_out)}<br/>"
-                f"Durée : {b.nights} nuit{'s' if b.nights > 1 else ''}",
+                f"Durée : {b.duration_label}",
                 ParagraphStyle('info', parent=styles['Normal'], fontSize=9, textColor=dark, leading=13)),
         ],
     ]
@@ -102,9 +103,14 @@ def generate_invoice_pdf_response(invoice) -> HttpResponse:
     story.append(Spacer(1, 0.6*cm))
 
     # Tableau des montants
+    if b.billing_type == b.BillingType.HOURLY:
+        hebergement_label = f"Hébergement · {b.duration_label} × {fmt_fcfa(b.price_per_hour or 0)}/heure"
+    else:
+        hebergement_label = f"Hébergement · {b.duration_label} × {fmt_fcfa(b.price_per_night)}/nuit"
+
     lines = [
         [Paragraph('<b>DÉSIGNATION</b>', label_style), Paragraph('<b>MONTANT</b>', ParagraphStyle('r', parent=label_style, alignment=TA_RIGHT))],
-        [Paragraph(f"Hébergement · {b.nights} nuit{'s' if b.nights > 1 else ''} × {fmt_fcfa(b.price_per_night)}/nuit", value_style),
+        [Paragraph(hebergement_label, value_style),
          Paragraph(fmt_fcfa(b.total_price), ParagraphStyle('ra', parent=value_style, alignment=TA_RIGHT))],
     ]
     for svc in (invoice.extra_services or []):

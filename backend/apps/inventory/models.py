@@ -69,7 +69,7 @@ class InventoryMovement(models.Model):
         null=True, blank=True, related_name='inventory_movements', db_index=True,
     )
     reference     = models.CharField(max_length=20, unique=True, editable=False)
-    item          = models.ForeignKey(InventoryItem, on_delete=models.CASCADE, related_name='movements')
+    item          = models.ForeignKey(InventoryItem, on_delete=models.SET_NULL, null=True, blank=True, related_name='movements')
     movement_type = models.CharField(max_length=12, choices=MovementType.choices)
     quantity      = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Quantité')
     room          = models.ForeignKey('rooms.Room', on_delete=models.SET_NULL, null=True, blank=True,
@@ -91,4 +91,5 @@ class InventoryMovement(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f'{self.reference} — {self.item.name} ({self.get_movement_type_display()}: {self.quantity})'
+        item_label = self.item.name if self.item_id else 'article supprimé'
+        return f'{self.reference} — {item_label} ({self.get_movement_type_display()}: {self.quantity})'

@@ -1,5 +1,6 @@
 from decimal import Decimal
 from django.db import transaction
+from django.db.models import Count
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
@@ -18,6 +19,9 @@ class InventoryCategoryViewSet(HotelScopeMixin, viewsets.ModelViewSet):
     filter_backends = [filters.OrderingFilter]
     ordering = ['name']
     http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        return super().get_queryset().annotate(items_count=Count('items'))
 
     def get_permissions(self):
         if self.action in ('create', 'destroy'):

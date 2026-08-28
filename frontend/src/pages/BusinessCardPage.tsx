@@ -121,16 +121,16 @@ export default function BusinessCardPage() {
     <div className="p-4 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-5 print:hidden">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Carte de visite</h2>
-          <p className="text-sm text-gray-400">Personnalisez les informations puis imprimez ou exportez</p>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Carte de visite</h2>
+          <p className="text-sm text-gray-400 dark:text-gray-500">Personnalisez les informations puis imprimez ou exportez</p>
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs text-gray-500">
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
             Cartes/page
             <select
               value={copiesPerPage}
               onChange={e => setCopiesPerPage(Number(e.target.value))}
-              className="border border-gray-200 rounded-lg text-xs px-2 py-2 bg-white focus:outline-none focus:border-amber-500"
+              className="border border-gray-200 dark:border-gray-700 rounded-lg text-xs px-2 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 focus:outline-none focus:border-amber-500"
             >
               {COPIES_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
             </select>
@@ -151,14 +151,14 @@ export default function BusinessCardPage() {
         {/* Formulaire de personnalisation */}
         <div className="card space-y-4 print:hidden">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">Informations</h3>
-            <button onClick={handleReset} className="text-xs text-gray-400 hover:text-gray-600 font-medium flex items-center gap-1">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Informations</h3>
+            <button onClick={handleReset} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 font-medium flex items-center gap-1">
               <i className="bi bi-arrow-counterclockwise" /> Réinitialiser
             </button>
           </div>
 
           <div>
-            <label className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1.5">Modèle</label>
+            <label className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400 mb-1.5">Modèle</label>
             <div className="grid grid-cols-3 gap-2">
               {CARD_TEMPLATES.map(t => (
                 <button
@@ -168,7 +168,7 @@ export default function BusinessCardPage() {
                   className={`rounded-lg overflow-hidden border-2 transition-colors ${card.template === t.id ? 'border-hotel-gold' : 'border-transparent'}`}
                 >
                   <div className="h-10 w-full" style={{ background: t.swatch }} />
-                  <div className={`text-[10px] font-medium py-1 text-center ${card.template === t.id ? 'text-hotel-gold bg-amber-50' : 'text-gray-500 bg-gray-50'}`}>
+                  <div className={`text-[10px] font-medium py-1 text-center ${card.template === t.id ? 'text-hotel-gold bg-amber-50 dark:bg-amber-950/40' : 'text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800'}`}>
                     {t.label}
                   </div>
                 </button>
@@ -177,7 +177,7 @@ export default function BusinessCardPage() {
           </div>
 
           <div>
-            <label className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1.5">Teinte dorée</label>
+            <label className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400 mb-1.5">Teinte dorée</label>
             <div className="flex items-center gap-2.5">
               {GOLD_PALETTES.map(g => (
                 <button
@@ -189,7 +189,7 @@ export default function BusinessCardPage() {
                   style={{ background: `linear-gradient(135deg, ${g.light}, ${g.base}, ${g.dark})` }}
                 />
               ))}
-              <span className="text-xs text-gray-400 ml-1">{GOLD_PALETTES.find(g => g.id === card.goldColor)?.label}</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500 ml-1">{GOLD_PALETTES.find(g => g.id === card.goldColor)?.label}</span>
             </div>
           </div>
 
@@ -211,24 +211,24 @@ export default function BusinessCardPage() {
             <input value={card.email} onChange={set('email')} placeholder="jean@monhotel.ci" />
           </FormField>
 
-          <div className="h-px bg-gray-100 my-2" />
+          <div className="h-px bg-gray-100 dark:bg-gray-800 my-2" />
 
           <div>
-            <label className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-600 mb-1.5">Logo</label>
+            <label className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-gray-600 dark:text-gray-400 mb-1.5">Logo</label>
             <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-lg border border-gray-200 flex items-center justify-center overflow-hidden bg-gray-50 shrink-0">
+              <div className="w-14 h-14 rounded-lg border border-gray-200 dark:border-gray-700 flex items-center justify-center overflow-hidden bg-gray-50 dark:bg-gray-800 shrink-0">
                 {card.logoUrl
                   ? <img src={mediaUrl(card.logoUrl)} alt="Logo" className="w-full h-full object-contain" />
-                  : <i className="bi bi-image text-gray-300 text-xl" />}
+                  : <i className="bi bi-image text-gray-300 dark:text-gray-600 text-xl" />}
               </div>
               <div className="flex flex-col gap-1">
                 <button type="button" onClick={() => logoInputRef.current?.click()}
-                  className="text-xs text-amber-600 hover:text-amber-700 font-medium flex items-center gap-1">
+                  className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-medium flex items-center gap-1">
                   <i className="bi bi-upload" /> Changer le logo
                 </button>
                 {card.logoUrl && (
                   <button type="button" onClick={handleRemoveLogo}
-                    className="text-xs text-red-400 hover:text-red-600 font-medium flex items-center gap-1">
+                    className="text-xs text-red-400 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 font-medium flex items-center gap-1">
                     <i className="bi bi-trash" /> Retirer
                   </button>
                 )}
@@ -247,7 +247,7 @@ export default function BusinessCardPage() {
             <input value={card.address} onChange={set('address')} placeholder="Abidjan, Côte d'Ivoire" />
           </FormField>
 
-          <div className="flex justify-end pt-2 border-t border-gray-100">
+          <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
             <button onClick={handleSave} className="btn-primary min-w-[140px] justify-center">
               <i className="bi bi-check-lg" /> Enregistrer
             </button>

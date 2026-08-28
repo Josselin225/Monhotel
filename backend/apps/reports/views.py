@@ -1,9 +1,9 @@
 import datetime
-import calendar
 from decimal import Decimal
 
 from dateutil.relativedelta import relativedelta
-from django.db.models import Sum, Avg, Count, Max, Q
+from django.conf import settings
+from django.db.models import Sum, Avg
 from django.utils import timezone
 
 from rest_framework.views import APIView
@@ -140,12 +140,19 @@ class MonthlyReportView(APIView):
         income  = txs.filter(type='income').aggregate(s=Sum('amount'))['s'] or Decimal('0')
         expense = txs.filter(type='expense').aggregate(s=Sum('amount'))['s'] or Decimal('0')
 
+        # Un seul GROUP BY (catégorie, type) au lieu de 2 requêtes par catégorie.
+        cat_totals = {}
+        for row in txs.values('category', 'type').annotate(total=Sum('amount')):
+            cat_totals.setdefault(row['category'], {})[row['type']] = row['total'] or Decimal('0')
+
         by_cat = {}
         for cat, lbl in CATEGORY_LABELS.items():
-            ci = txs.filter(type='income',  category=cat).aggregate(s=Sum('amount'))['s'] or Decimal('0')
-            ce = txs.filter(type='expense', category=cat).aggregate(s=Sum('amount'))['s'] or Decimal('0')
-            if ci or ce:
-                by_cat[cat] = {'label': lbl, 'income': float(ci), 'expense': float(ce)}
+            totals = cat_totals.get(cat)
+            if not totals:
+                continue
+            ci = totals.get('income', Decimal('0'))
+            ce = totals.get('expense', Decimal('0'))
+            by_cat[cat] = {'label': lbl, 'income': float(ci), 'expense': float(ce)}
 
         finances_data = {
             'income':      float(income),
@@ -236,11 +243,11 @@ class FullReportView(APIView):
         try:
             return self._build(request)
         except Exception as exc:
-            import traceback as _tb
-            return Response(
-                {'error': str(exc), 'traceback': _tb.format_exc()},
-                status=500,
-            )
+            payload = {'error': str(exc)}
+            if settings.DEBUG:
+                import traceback as _tb
+                payload['traceback'] = _tb.format_exc()
+            return Response(payload, status=500)
 
     def _build(self, request):
         today = timezone.now().date()
@@ -349,13 +356,31 @@ class FullReportView(APIView):
             vip_status__in=['vip', 'vvip'], is_blacklisted=False
         )).order_by('-vip_status')
 
+        vip_clients = list(vip_qs)
+        vip_ids = [c.id for c in vip_clients]
+
+        # Toutes les réservations conclues des clients VIP en une seule requête,
+        # au lieu de 3-4 requêtes par client (count/aggregate/first/first).
+        vip_bookings = list(
+            Booking.objects.filter(client_id__in=vip_ids, status=Booking.Status.CHECKED_OUT)
+            .select_related('room').order_by('client_id', '-check_out')
+        )
+        stats_by_client = {}
+        last_by_client = {}
+        period_clients = set()
+        for b in vip_bookings:
+            stats = stats_by_client.setdefault(b.client_id, {'total_stays': 0, 'total_spent': Decimal('0')})
+            stats['total_stays'] += 1
+            stats['total_spent'] += b.total_price
+            if b.client_id not in last_by_client:
+                last_by_client[b.client_id] = b  # première rencontrée = plus récente (tri -check_out)
+            if start <= b.check_out <= end:
+                period_clients.add(b.client_id)
+
         vip_list = []
-        for client in vip_qs:
-            client_bk = Booking.objects.filter(client=client, status=Booking.Status.CHECKED_OUT)
-            total_stays = client_bk.count()
-            total_spent = client_bk.aggregate(s=Sum('total_price'))['s'] or Decimal('0')
-            last_bk     = client_bk.select_related('room').order_by('-check_out').first()
-            period_bk   = client_bk.filter(check_out__gte=start, check_out__lte=end).first()
+        for client in vip_clients:
+            stats   = stats_by_client.get(client.id, {'total_stays': 0, 'total_spent': Decimal('0')})
+            last_bk = last_by_client.get(client.id)
             vip_list.append({
                 'id':           client.id,
                 'name':         f"{client.first_name} {client.last_name}",
@@ -364,11 +389,11 @@ class FullReportView(APIView):
                 'vip_status':   client.vip_status,
                 'nationality':  client.nationality or '',
                 'preferences':  client.preferences or '',
-                'total_stays':  total_stays,
-                'total_spent':  float(total_spent),
+                'total_stays':  stats['total_stays'],
+                'total_spent':  float(stats['total_spent']),
                 'last_stay':    str(last_bk.check_out)   if last_bk   else None,
                 'last_room':    last_bk.room.number       if last_bk   else None,
-                'stayed_this_period': bool(period_bk),
+                'stayed_this_period': client.id in period_clients,
             })
 
         vip_list.sort(key=lambda x: (0 if x['vip_status'] == 'vvip' else 1, -x['total_spent']))
@@ -385,10 +410,15 @@ class FullReportView(APIView):
         expense = txs.filter(type='expense').aggregate(s=Sum('amount'))['s'] or Decimal('0')
         net     = income - expense
 
+        # Un seul GROUP BY (catégorie, type) au lieu d'une requête par catégorie.
+        cat_totals = {}
+        for row in txs.values('category', 'type').annotate(total=Sum('amount')):
+            cat_totals.setdefault(row['type'], {})[row['category']] = row['total'] or Decimal('0')
+
         # Income by category
         income_cats = []
         for cat in INCOME_CATEGORIES:
-            amt = txs.filter(type='income', category=cat).aggregate(s=Sum('amount'))['s'] or Decimal('0')
+            amt = cat_totals.get('income', {}).get(cat, Decimal('0'))
             if amt:
                 income_cats.append({
                     'key':    cat,
@@ -398,13 +428,17 @@ class FullReportView(APIView):
                 })
         income_cats.sort(key=lambda x: -x['amount'])
 
-        # Expense by category + budget
+        # Expense by category + budget — budgets du mois chargés en une seule requête.
+        budgets_by_cat = {
+            b.category: b
+            for b in scoped(Budget.objects.filter(
+                category__in=EXPENSE_CATEGORIES, period='monthly', year=year, month=month
+            ))
+        }
         expense_cats = []
         for cat in EXPENSE_CATEGORIES:
-            amt = txs.filter(type='expense', category=cat).aggregate(s=Sum('amount'))['s'] or Decimal('0')
-            budget_obj = scoped(Budget.objects.filter(
-                category=cat, period='monthly', year=year, month=month
-            )).first()
+            amt = cat_totals.get('expense', {}).get(cat, Decimal('0'))
+            budget_obj = budgets_by_cat.get(cat)
             budget_amt = float(budget_obj.amount) if budget_obj else None
             if amt or budget_amt:
                 expense_cats.append({
@@ -418,10 +452,14 @@ class FullReportView(APIView):
                 })
         expense_cats.sort(key=lambda x: -x['amount'])
 
-        # Payment methods (income only)
+        # Payment methods (income only) — un seul GROUP BY.
+        pm_totals = {
+            row['payment_method']: row['total'] or Decimal('0')
+            for row in txs.filter(type='income').values('payment_method').annotate(total=Sum('amount'))
+        }
         payment_methods = []
         for pm, lbl in PAYMENT_LABELS.items():
-            amt = txs.filter(type='income', payment_method=pm).aggregate(s=Sum('amount'))['s'] or Decimal('0')
+            amt = pm_totals.get(pm, Decimal('0'))
             if amt:
                 payment_methods.append({
                     'method': pm, 'label': lbl, 'amount': float(amt),

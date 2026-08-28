@@ -20,6 +20,11 @@ class CleaningTaskViewSet(HotelScopeMixin, viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'scheduled_for', 'priority']
     ordering = ['-created_at']
 
+    def get_permissions(self):
+        if self.action == 'destroy':
+            return [IsAdminOrManager()]
+        return [IsAuthenticated()]
+
     def get_queryset(self):
         qs = CleaningTask.objects.select_related(
             'room', 'room__room_type', 'assigned_to', 'booking'
@@ -28,6 +33,18 @@ class CleaningTaskViewSet(HotelScopeMixin, viewsets.ModelViewSet):
         if hotel is not None:
             qs = qs.filter(hotel=hotel)
         return qs
+
+    def _validate_related(self, serializer):
+        self.check_related_hotel(serializer.validated_data.get('room'), 'room')
+        self.check_related_hotel(serializer.validated_data.get('booking'), 'booking')
+
+    def perform_create(self, serializer):
+        self._validate_related(serializer)
+        super().perform_create(serializer)
+
+    def perform_update(self, serializer):
+        self._validate_related(serializer)
+        serializer.save()
 
     @action(detail=True, methods=['post'])
     def start(self, request, pk=None):

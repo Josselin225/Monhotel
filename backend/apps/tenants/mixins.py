@@ -27,3 +27,15 @@ class HotelScopeMixin:
             serializer.save(hotel=hotel)
         else:
             serializer.save()
+
+    def check_related_hotel(self, obj, field_name='related'):
+        """À appeler depuis perform_create/perform_update quand la requête accepte une
+        clé étrangère vers un objet lui-même rattaché à un hôtel (chambre, client,
+        réservation, employé...). Le filtrage de get_queryset() et l'auto-assignation
+        de `hotel` sur l'instance créée ne protègent PAS ce cas : sans cette vérification,
+        un utilisateur peut référencer par son ID un objet appartenant à un AUTRE hôtel
+        et se le faire silencieusement rattacher à ses propres données."""
+        hotel = self.get_hotel()
+        if hotel is not None and obj is not None and getattr(obj, 'hotel_id', None) != hotel.id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({field_name: 'Introuvable.'})

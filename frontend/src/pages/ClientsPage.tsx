@@ -10,6 +10,7 @@ import FormField from '../components/FormField'
 import PageHeader from '../components/PageHeader'
 import { SkeletonTablePage } from '../components/Skeleton'
 import { useDebounce } from '../hooks/useDebounce'
+import { useAuth } from '../context/AuthContext'
 
 const clientSchema = z.object({
   first_name:  z.string().min(1, 'Prénom requis'),
@@ -31,6 +32,8 @@ const EMPTY_FORM = {
 }
 
 export default function ClientsPage() {
+  const { user } = useAuth()
+  const isManager = user?.role === 'admin' || user?.role === 'manager'
   const [clients, setClients] = useState<Client[]>([])
   const [total, setTotal]     = useState(0)
   const [page, setPage]       = useState(1)
@@ -168,16 +171,20 @@ export default function ClientsPage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-700 font-medium">{total} client{total > 1 ? 's' : ''} au total</p>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={handleExportCsv} className="btn-secondary flex items-center gap-2 text-sm">
-              <i className="bi bi-download" /> <span className="hidden sm:inline">Export</span> CSV
-            </button>
-            <button onClick={handleExportXlsx} className="btn-secondary flex items-center gap-2 text-sm text-emerald-700 hover:text-emerald-800">
-              <i className="bi bi-file-earmark-excel" /> <span className="hidden sm:inline">Export</span> Excel
-            </button>
-            <label className="btn-secondary flex items-center gap-2 text-sm cursor-pointer">
-              <i className="bi bi-upload" /> <span className="hidden sm:inline">Import</span> CSV
-              <input type="file" accept=".csv" className="sr-only" onChange={handleImportCsv} />
-            </label>
+            {isManager && (
+              <>
+                <button onClick={handleExportCsv} className="btn-secondary flex items-center gap-2 text-sm">
+                  <i className="bi bi-download" /> <span className="hidden sm:inline">Export</span> CSV
+                </button>
+                <button onClick={handleExportXlsx} className="btn-secondary flex items-center gap-2 text-sm text-emerald-700 hover:text-emerald-800">
+                  <i className="bi bi-file-earmark-excel" /> <span className="hidden sm:inline">Export</span> Excel
+                </button>
+                <label className="btn-secondary flex items-center gap-2 text-sm cursor-pointer">
+                  <i className="bi bi-upload" /> <span className="hidden sm:inline">Import</span> CSV
+                  <input type="file" accept=".csv" className="sr-only" onChange={handleImportCsv} />
+                </label>
+              </>
+            )}
             <button onClick={openCreate} className="btn-primary flex items-center gap-2 text-sm">
               <i className="bi bi-plus-lg" /> Nouveau client
             </button>
@@ -246,14 +253,18 @@ export default function ClientsPage() {
                     <div className="flex gap-1">
                       <button onClick={() => openDetail(c)} title="Voir les séjours" className="btn-secondary text-xs px-2 py-1"><i className="bi bi-clock-history" /></button>
                       <button onClick={() => openEdit(c)} className="btn-secondary text-xs px-2 py-1"><i className="bi bi-pencil" /></button>
-                      <button
-                        onClick={() => handleToggleBlacklist(c)}
-                        title={c.is_blacklisted ? 'Retirer de la liste noire' : 'Mettre en liste noire'}
-                        className={`text-xs px-2 py-1 rounded-lg transition-colors font-medium ${c.is_blacklisted ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'btn-secondary'}`}
-                      >
-                        <i className={`bi bi-${c.is_blacklisted ? 'slash-circle-fill' : 'slash-circle'}`} />
-                      </button>
-                      <button onClick={() => handleDelete(c.id)} className="btn-danger text-xs px-2 py-1"><i className="bi bi-trash" /></button>
+                      {isManager && (
+                        <>
+                          <button
+                            onClick={() => handleToggleBlacklist(c)}
+                            title={c.is_blacklisted ? 'Retirer de la liste noire' : 'Mettre en liste noire'}
+                            className={`text-xs px-2 py-1 rounded-lg transition-colors font-medium ${c.is_blacklisted ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'btn-secondary'}`}
+                          >
+                            <i className={`bi bi-${c.is_blacklisted ? 'slash-circle-fill' : 'slash-circle'}`} />
+                          </button>
+                          <button onClick={() => handleDelete(c.id)} className="btn-danger text-xs px-2 py-1"><i className="bi bi-trash" /></button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -303,12 +314,16 @@ export default function ClientsPage() {
                   <div className="flex gap-1 w-full justify-center border-t border-gray-100 pt-3">
                     <button onClick={() => openDetail(c)} title="Voir les séjours" className="btn-secondary text-xs px-2 py-1"><i className="bi bi-clock-history" /></button>
                     <button onClick={() => openEdit(c)} className="btn-secondary text-xs px-2 py-1"><i className="bi bi-pencil" /></button>
-                    <button
-                      onClick={() => handleToggleBlacklist(c)}
-                      title={c.is_blacklisted ? 'Retirer de la liste noire' : 'Mettre en liste noire'}
-                      className={`text-xs px-2 py-1 rounded-lg transition-colors font-medium ${c.is_blacklisted ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'btn-secondary'}`}
-                    ><i className={`bi bi-${c.is_blacklisted ? 'slash-circle-fill' : 'slash-circle'}`} /></button>
-                    <button onClick={() => handleDelete(c.id)} className="btn-danger text-xs px-2 py-1"><i className="bi bi-trash" /></button>
+                    {isManager && (
+                      <>
+                        <button
+                          onClick={() => handleToggleBlacklist(c)}
+                          title={c.is_blacklisted ? 'Retirer de la liste noire' : 'Mettre en liste noire'}
+                          className={`text-xs px-2 py-1 rounded-lg transition-colors font-medium ${c.is_blacklisted ? 'bg-red-100 text-red-700 hover:bg-red-200' : 'btn-secondary'}`}
+                        ><i className={`bi bi-${c.is_blacklisted ? 'slash-circle-fill' : 'slash-circle'}`} /></button>
+                        <button onClick={() => handleDelete(c.id)} className="btn-danger text-xs px-2 py-1"><i className="bi bi-trash" /></button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

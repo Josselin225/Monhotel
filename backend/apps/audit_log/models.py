@@ -1,3 +1,4 @@
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
 
@@ -19,7 +20,7 @@ class AuditEntry(models.Model):
     object_repr = models.CharField(max_length=255, blank=True)
     description = models.TextField(blank=True)
     ip_address  = models.GenericIPAddressField(null=True, blank=True)
-    changes     = models.JSONField(default=dict, blank=True, help_text="Champs modifiés : {champ: [avant, après]} ou snapshot à la suppression")
+    changes     = models.JSONField(default=dict, blank=True, encoder=DjangoJSONEncoder, help_text="Champs modifiés : {champ: [avant, après]} ou snapshot à la suppression")
     created_at  = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

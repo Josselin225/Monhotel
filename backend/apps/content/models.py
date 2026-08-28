@@ -81,6 +81,10 @@ DEFAULT_CONTENT = {
         {"image": "https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=600&q=80",  "label": "Spa"},
         {"image": "https://images.unsplash.com/photo-1578683010236-d716f9a3f461?w=600&q=80",  "label": "Suite"},
     ],
+    "video": {
+        "url": "",
+        "title": "Découvrez notre hôtel en vidéo",
+    },
     "testimonials": [
         {
             "author": "Adjoua Brou", "role": "Cliente fidèle",
@@ -118,6 +122,11 @@ DEFAULT_CONTENT = {
 
 class SiteContent(models.Model):
     data = models.JSONField(default=dict)
+    # Fichier vidéo uploadé, gardé hors de `data` : GET /api/content/ (chargé sur chaque
+    # visite de la page vitrine) resterait sinon alourdi de plusieurs Mo. Servi séparément
+    # par ContentVideoFileView. Un lien externe (YouTube/Vimeo) ne passe pas par ces champs.
+    video_file = models.BinaryField(null=True, blank=True)
+    video_content_type = models.CharField(max_length=100, blank=True, default='')
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:

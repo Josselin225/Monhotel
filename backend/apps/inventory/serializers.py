@@ -3,7 +3,9 @@ from .models import InventoryCategory, InventoryItem, InventoryMovement
 
 
 class InventoryCategorySerializer(serializers.ModelSerializer):
-    items_count = serializers.IntegerField(source='items.count', read_only=True)
+    # Alimenté par l'annotation Count('items') du queryset (évite un N+1 par catégorie) ;
+    # `default=0` couvre l'instance fraîchement créée (hors queryset annoté).
+    items_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = InventoryCategory
@@ -33,8 +35,8 @@ class InventoryItemSerializer(serializers.ModelSerializer):
 
 class InventoryMovementSerializer(serializers.ModelSerializer):
     movement_type_display = serializers.CharField(source='get_movement_type_display', read_only=True)
-    item_name             = serializers.CharField(source='item.name', read_only=True)
-    item_unit             = serializers.CharField(source='item.unit', read_only=True)
+    item_name             = serializers.CharField(source='item.name', read_only=True, default=None)
+    item_unit             = serializers.CharField(source='item.unit', read_only=True, default=None)
     room_number           = serializers.CharField(source='room.number', read_only=True, default=None)
     created_by_name       = serializers.SerializerMethodField()
 
@@ -45,11 +47,20 @@ class InventoryMovementSerializer(serializers.ModelSerializer):
             'quantity', 'room', 'room_number', 'reason', 'created_by', 'created_by_name', 'created_at',
         ]
         read_only_fields = ['id', 'reference', 'created_by', 'created_at']
+        # `item` est nullable au niveau du modèle (SET_NULL, pour garder l'historique
+        # d'un mouvement même après suppression de l'article) mais reste obligatoire
+        # à la création d'un mouvement.
+        extra_kwargs = {'item': {'required': True}}
 
     def get_created_by_name(self, obj):
         if obj.created_by:
             return obj.created_by.get_full_name() or obj.created_by.username
         return None
+
+    def validate_quantity(self, value):
+        if value < 0:
+            raise serializers.ValidationError('La quantité ne peut pas être négative.')
+        return value
 
     def validate(self, attrs):
         item = attrs.get('item') or getattr(self.instance, 'item', None)

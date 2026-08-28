@@ -20,6 +20,7 @@ interface NavItem {
   end?: boolean
   href?: string
   managerOnly?: boolean
+  adminOnly?: boolean
 }
 
 interface NavGroup {
@@ -52,6 +53,16 @@ const navGroups: NavGroup[] = [
       { to: '/app/maintenance',   label: 'Maintenance',   icon: 'bi-tools' },
       { to: '/app/inventory',     label: 'Stocks',        icon: 'bi-box-seam' },
       { to: '/app/schedule',      label: 'Planning personnel', icon: 'bi-calendar-week' },
+      { to: '/app/rfid',          label: 'Cartes RFID',   icon: 'bi-credit-card-2-front' },
+    ],
+  },
+  {
+    label: 'Services',
+    items: [
+      { to: '/app/services/restaurant', label: 'Restaurant',           icon: 'bi-cup-hot' },
+      { to: '/app/services/conference', label: 'Salle de conférence',  icon: 'bi-easel' },
+      { to: '/app/services/pool',       label: 'Piscine',              icon: 'bi-water' },
+      { to: '/app/services/spa',        label: 'Spa',                  icon: 'bi-flower1' },
     ],
   },
   {
@@ -59,7 +70,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: '/app/clients',  label: 'Clients',       icon: 'bi-people' },
       { to: '/app/crm',      label: 'CRM',           icon: 'bi-heart-pulse' },
-      { to: '/app/surveys',  label: 'Satisfaction',  icon: 'bi-emoji-smile' },
+      { to: '/app/surveys',  label: 'Satisfaction',  icon: 'bi-emoji-smile', managerOnly: true },
     ],
   },
   {
@@ -81,16 +92,15 @@ const navGroups: NavGroup[] = [
   {
     label: 'Site',
     items: [
-      { to: '/app/content', label: "Page d'accueil", icon: 'bi-layout-text-window' },
+      { to: '/app/content', label: "Page d'accueil", icon: 'bi-layout-text-window', managerOnly: true },
     ],
   },
   {
     label: 'Administration',
-    adminOnly: true,
     items: [
-      { to: '/app/pricing',    label: 'Tarification', icon: 'bi-tags' },
-      { to: '/app/users',      label: 'Utilisateurs', icon: 'bi-person-gear' },
-      { to: '/app/audit-log',  label: "Journal d'audit", icon: 'bi-shield-check' },
+      { to: '/app/pricing',    label: 'Tarification', icon: 'bi-tags', managerOnly: true },
+      { to: '/app/users',      label: 'Utilisateurs', icon: 'bi-person-gear', adminOnly: true },
+      { to: '/app/audit-log',  label: "Journal d'audit", icon: 'bi-shield-check', managerOnly: true },
     ],
   },
   {
@@ -139,6 +149,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/app/group-dashboard': 'Tableau de bord groupe',
   '/app/inventory':    'Stocks',
   '/app/schedule':     'Planning personnel',
+  '/app/rfid':         'Cartes RFID',
   '/app/carte-visite': 'Carte de visite',
 }
 
@@ -219,7 +230,11 @@ const Sidebar = memo(function Sidebar({
           if (group.superuserOnly && !user?.is_superuser) return null
 
           const isManager = user?.role === 'admin' || user?.role === 'manager'
-          const items = group.items.filter(item => !item.managerOnly || isManager)
+          const items = group.items.filter(item => {
+            if (item.adminOnly && user?.role !== 'admin') return false
+            if (item.managerOnly && !isManager) return false
+            return true
+          })
           if (items.length === 0) return null
 
           const mini       = collapsed && !isMobile

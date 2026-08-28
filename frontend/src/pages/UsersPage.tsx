@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { usersApi, UserPayload } from '../api/users'
 import { User } from '../types'
@@ -53,9 +54,6 @@ export default function UsersPage() {
 
   useEffect(() => { load() }, [load])
 
-  const openCreate = () => {
-    setEditing(null); setForm(EMPTY_FORM); setErrors({}); setShowModal(true)
-  }
   const openEdit = (u: User) => {
     setEditing(u)
     setForm({ username: u.username, first_name: u.first_name, last_name: u.last_name,
@@ -78,7 +76,6 @@ export default function UsersPage() {
     if (!form.username.trim()) errs.username = 'Identifiant requis'
     if (!form.first_name.trim()) errs.first_name = 'Prénom requis'
     if (!form.last_name.trim()) errs.last_name = 'Nom requis'
-    if (!editing && !form.password) errs.password = 'Mot de passe requis'
     if (form.password && form.password.length < 8) errs.password = 'Minimum 8 caractères'
     if (form.password && form.password !== form.confirm_password) errs.confirm_password = 'Les mots de passe ne correspondent pas'
     return errs
@@ -86,6 +83,7 @@ export default function UsersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!editing) return
     const errs = validate()
     if (Object.keys(errs).length) { setErrors(errs); return }
     setSaving(true)
@@ -97,13 +95,8 @@ export default function UsersPage() {
       }
       if (form.password) payload.password = form.password
 
-      if (editing) {
-        await usersApi.update(editing.id, payload)
-        toast.success('Utilisateur mis à jour')
-      } else {
-        await usersApi.create({ ...payload, password: form.password } as UserPayload & { password: string })
-        toast.success('Utilisateur créé')
-      }
+      await usersApi.update(editing.id, payload)
+      toast.success('Utilisateur mis à jour')
       setShowModal(false); load()
     } catch (err) { toast.error(getApiError(err))
     } finally { setSaving(false) }
@@ -139,11 +132,13 @@ export default function UsersPage() {
       <PageHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-700 font-medium">{counts.active} actif{counts.active > 1 ? 's' : ''} sur {counts.total}</p>
-          <button onClick={openCreate} className="btn-primary flex items-center gap-2 text-sm self-start sm:self-auto">
-            <i className="bi bi-person-plus" /> Nouvel utilisateur
-          </button>
         </div>
       </PageHeader>
+
+      <div className="flex items-start gap-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 mb-4">
+        <i className="bi bi-info-circle mt-0.5" />
+        <p>Un compte est toujours rattaché à un employé. Pour créer un nouvel utilisateur, ajoutez-le d'abord comme employé dans <Link to="/app/schedule" className="font-medium text-hotel-gold hover:underline">Planning personnel</Link>, puis cliquez sur « Créer un compte » depuis sa fiche.</p>
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
@@ -237,7 +232,7 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Modal création / édition */}
+      {/* Modal édition */}
       {showModal && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="modal-box max-w-lg">
@@ -248,11 +243,9 @@ export default function UsersPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-gray-900">
-                    {editing ? `Modifier — ${editing.username}` : 'Nouvel utilisateur'}
+                    Modifier — {editing?.username}
                   </h3>
-                  <p className="text-xs text-gray-400">
-                    {editing ? 'Laissez le mot de passe vide pour ne pas le changer' : 'Remplissez toutes les informations'}
-                  </p>
+                  <p className="text-xs text-gray-400">Laissez le mot de passe vide pour ne pas le changer</p>
                 </div>
               </div>
               <button onClick={() => setShowModal(false)} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
@@ -302,35 +295,31 @@ export default function UsersPage() {
 
               {/* Mot de passe */}
               <div>
-                <p className="form-section mb-3">
-                  {editing ? 'Réinitialiser le mot de passe (optionnel)' : 'Mot de passe'}
-                </p>
+                <p className="form-section mb-3">Réinitialiser le mot de passe (optionnel)</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <FormField label={editing ? 'Nouveau mot de passe' : 'Mot de passe'} icon="bi-lock" error={errors.password} required={!editing}>
+                  <FormField label="Nouveau mot de passe" icon="bi-lock" error={errors.password}>
                     <input type="password" value={form.password} onChange={set('password')} placeholder="Minimum 8 caractères" />
                   </FormField>
-                  <FormField label="Confirmer" icon="bi-lock-fill" error={errors.confirm_password} required={!editing && !!form.password}>
+                  <FormField label="Confirmer" icon="bi-lock-fill" error={errors.confirm_password} required={!!form.password}>
                     <input type="password" value={form.confirm_password} onChange={set('confirm_password')} placeholder="Répétez le mot de passe" />
                   </FormField>
                 </div>
               </div>
 
-              {/* Statut (edit only) */}
-              {editing && (
-                <div className="flex items-center gap-3 pt-1">
+              {/* Statut */}
+              <div className="flex items-center gap-3 pt-1">
                   <input type="checkbox" id="is_active" checked={form.is_active ?? true}
                     onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))}
                     className="w-4 h-4 accent-amber-500" />
                   <label htmlFor="is_active" className="text-sm text-gray-700">Compte actif</label>
-                </div>
-              )}
+              </div>
 
               <div className="flex gap-3 justify-end pt-2 border-t border-gray-100">
                 <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Annuler</button>
                 <button type="submit" disabled={saving} className="btn-primary min-w-[120px] justify-center">
                   {saving
                     ? <><i className="bi bi-arrow-repeat animate-spin" /> Enregistrement…</>
-                    : <><i className={`bi ${editing ? 'bi-check-lg' : 'bi-person-plus'}`} /> {editing ? 'Enregistrer' : 'Créer'}</>
+                    : <><i className="bi bi-check-lg" /> Enregistrer</>
                   }
                 </button>
               </div>

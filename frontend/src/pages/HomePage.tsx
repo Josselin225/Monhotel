@@ -160,6 +160,17 @@ function FadeSection({ children, className = '', delay = 0, onClick }: {
   )
 }
 
+/** Convertit un lien YouTube/Vimeo "classique" en URL embarquable ; renvoie null si le format n'est pas reconnu et n'est pas un fichier vidéo direct. */
+function getVideoEmbed(url: string): { type: 'iframe' | 'file'; src: string } | null {
+  if (!url) return null
+  const youtube = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]{11})/)
+  if (youtube) return { type: 'iframe', src: `https://www.youtube.com/embed/${youtube[1]}` }
+  const vimeo = url.match(/vimeo\.com\/(?:video\/)?(\d+)/)
+  if (vimeo) return { type: 'iframe', src: `https://player.vimeo.com/video/${vimeo[1]}` }
+  if (url.startsWith('/api/content/video-file') || /\.(mp4|webm|ogg)(\?.*)?$/i.test(url)) return { type: 'file', src: url }
+  return { type: 'iframe', src: url }
+}
+
 export default function HomePage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -204,7 +215,7 @@ export default function HomePage() {
     </div>
   )
 
-  const { hotel, hero, stats, rooms, services, gallery, testimonials, cta, footer } = content
+  const { hotel, hero, stats, rooms, services, gallery, video, testimonials, cta, footer } = content
 
   return (
     <div className="min-h-screen bg-white font-sans overflow-x-hidden">
@@ -436,7 +447,7 @@ export default function HomePage() {
       </section>
 
       {/* ── Galerie ── */}
-      <section id="gallery" className="py-28 px-6 bg-white">
+      <section id="gallery" className="pt-28 pb-12 px-6 bg-white">
         <div className="max-w-7xl mx-auto">
           <FadeSection className="text-center mb-16">
             <p className="text-hotel-gold text-xs font-medium tracking-[0.4em] uppercase mb-3">Découvrir</p>
@@ -466,6 +477,35 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ── Vidéo ── */}
+      {video?.url && (
+        <section className="pt-0 pb-28 px-6 bg-white">
+          <div className="max-w-5xl mx-auto">
+            {video.title && (
+              <FadeSection className="text-center mb-12">
+                <h3 className="text-4xl md:text-5xl font-serif font-bold text-gray-900">{video.title}</h3>
+                <div className="w-16 h-0.5 bg-hotel-gold mx-auto mt-5" />
+              </FadeSection>
+            )}
+            <FadeSection className="relative rounded-2xl overflow-hidden shadow-2xl aspect-video bg-black">
+              {(() => {
+                const embed = getVideoEmbed(video.url)
+                if (!embed) return null
+                return embed.type === 'file'
+                  ? <video src={embed.src} controls className="w-full h-full object-cover" />
+                  : <iframe
+                      src={embed.src}
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                      title={video.title || 'Vidéo de présentation'}
+                    />
+              })()}
+            </FadeSection>
+          </div>
+        </section>
+      )}
 
       {/* ── Calendrier de disponibilité ── */}
       <section className="py-20 px-6 bg-[#1a1208]">

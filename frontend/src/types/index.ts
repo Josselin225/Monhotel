@@ -114,6 +114,19 @@ export interface Booking {
   payment_method_display: string
   special_requests: string
   notes: string
+  extras: {
+    id: number
+    booking: number
+    category: string
+    category_display: string
+    description: string
+    amount: string
+    quantity: number
+    total: string
+    date: string
+    created_at: string
+  }[]
+  extras_total: string
   created_at: string
 }
 

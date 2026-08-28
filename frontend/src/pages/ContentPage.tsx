@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { SkeletonContent } from '../components/Skeleton'
-import { getContent, updateContent, uploadLogo, removeLogo, uploadContentImage, SiteContent } from '../api/content'
+import { getContent, updateContent, uploadLogo, removeLogo, uploadContentImage, uploadContentVideo, removeContentVideo, SiteContent } from '../api/content'
+import { getApiError } from '../utils'
 
-type Tab = 'hotel' | 'hero' | 'stats' | 'rooms' | 'services' | 'gallery' | 'testimonials' | 'cta' | 'footer'
+type Tab = 'hotel' | 'hero' | 'stats' | 'rooms' | 'services' | 'gallery' | 'video' | 'testimonials' | 'cta' | 'footer'
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'hotel',        label: 'Hôtel',          icon: 'bi-building' },
@@ -11,6 +13,7 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'rooms',        label: 'Chambres',        icon: 'bi-door-open' },
   { key: 'services',     label: 'Services',        icon: 'bi-grid' },
   { key: 'gallery',      label: 'Galerie',         icon: 'bi-images' },
+  { key: 'video',        label: 'Vidéo',           icon: 'bi-play-circle' },
   { key: 'testimonials', label: 'Témoignages',     icon: 'bi-chat-quote' },
   { key: 'cta',          label: 'Call to action',  icon: 'bi-megaphone' },
   { key: 'footer',       label: 'Footer',          icon: 'bi-layout-text-window' },
@@ -27,7 +30,7 @@ function Field({ label, value, onChange, textarea = false, hint }: {
         ? <textarea className="input min-h-[80px] resize-y" value={value} onChange={e => onChange(e.target.value)} />
         : <input className="input" value={value} onChange={e => onChange(e.target.value)} />
       }
-      {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+      {hint && <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{hint}</p>}
     </div>
   )
 }
@@ -50,7 +53,8 @@ function ImageField({ label, value, onChange }: { label: string; value: string; 
       const url = await uploadContentImage(file)
       onChange(url)
       setPreview(url)
-    } catch {
+    } catch (err) {
+      toast.error(getApiError(err))
       setPreview(value)
     } finally {
       setUploading(false)
@@ -62,7 +66,7 @@ function ImageField({ label, value, onChange }: { label: string; value: string; 
     <div className="space-y-2">
       <label className="label">{label}</label>
       {preview && (
-        <img src={preview} alt="" className="h-32 w-full object-cover rounded-lg border border-gray-200"
+        <img src={preview} alt="" className="h-32 w-full object-cover rounded-lg border border-gray-200 dark:border-gray-700"
           onError={() => setPreview('')} />
       )}
       <div className="flex gap-2 items-center">
@@ -78,6 +82,81 @@ function ImageField({ label, value, onChange }: { label: string; value: string; 
           placeholder="ou coller une URL…"
         />
       </div>
+    </div>
+  )
+}
+
+function isDirectVideoFile(url: string) {
+  return url.startsWith('/api/content/video-file') || /\.(mp4|webm|ogg)(\?.*)?$/i.test(url)
+}
+
+function VideoField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setError('')
+    try {
+      const url = await uploadContentVideo(file)
+      onChange(url)
+    } catch (err) {
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setError(message || "Échec de l'envoi de la vidéo.")
+    } finally {
+      setUploading(false)
+      if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  const handleRemove = async () => {
+    setUploading(true)
+    setError('')
+    try {
+      await removeContentVideo()
+      onChange('')
+    } catch (err) {
+      const message = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setError(message || 'Échec de la suppression de la vidéo.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <label className="label">{label}</label>
+      {value && (
+        isDirectVideoFile(value)
+          ? <video key={value} src={value} controls className="h-40 w-full object-cover rounded-lg border border-gray-200 dark:border-gray-700 bg-black" />
+          : <p className="text-xs text-gray-400 dark:text-gray-500 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2">
+              Aperçu non disponible pour ce lien externe — vérifiez le rendu sur la page d'accueil.
+            </p>
+      )}
+      <div className="flex gap-2 items-center">
+        <label className={`btn-secondary cursor-pointer text-sm shrink-0 ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+          <i className="bi bi-upload" />
+          {uploading ? 'Envoi…' : 'Uploader'}
+          <input ref={inputRef} type="file" accept="video/*" className="hidden" onChange={handleFile} disabled={uploading} />
+        </label>
+        <input
+          className="input text-sm"
+          value={value}
+          onChange={e => { onChange(e.target.value); setError('') }}
+          placeholder="ou coller un lien YouTube/Vimeo…"
+        />
+        {value && isDirectVideoFile(value) && (
+          <button type="button" onClick={handleRemove} disabled={uploading}
+            className="text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 shrink-0">
+            Supprimer
+          </button>
+        )}
+      </div>
+      {error && <p className="text-xs text-red-500 dark:text-red-400">{error}</p>}
+      <p className="text-xs text-gray-400 dark:text-gray-500">Fichier uploadé : max 50 Mo (MP4, WebM ou Ogg).</p>
     </div>
   )
 }
@@ -99,7 +178,8 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
     try {
       const url = await uploadLogo(file)
       onChange(url)
-    } catch {
+    } catch (err) {
+      toast.error(getApiError(err))
       setPreview(value)
     } finally {
       setUploading(false)
@@ -113,6 +193,8 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
       await removeLogo()
       onChange('')
       setPreview('')
+    } catch (err) {
+      toast.error(getApiError(err))
     } finally {
       setUploading(false)
     }
@@ -122,10 +204,10 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
     <div className="col-span-2">
       <label className="label">Logo de l'hôtel</label>
       <div className="flex items-center gap-4 mt-2">
-        <div className="w-16 h-16 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden bg-gray-50 shrink-0">
+        <div className="w-16 h-16 rounded-full border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center overflow-hidden bg-gray-50 dark:bg-gray-800 shrink-0">
           {preview
             ? <img src={preview} alt="Logo" className="w-full h-full object-cover" onError={() => setPreview('')} />
-            : <i className="bi bi-building text-gray-400 text-xl" />
+            : <i className="bi bi-building text-gray-400 dark:text-gray-500 text-xl" />
           }
         </div>
         <div className="flex flex-col gap-2">
@@ -135,12 +217,12 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
             <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} disabled={uploading} />
           </label>
           {preview && !uploading && (
-            <button type="button" className="text-xs text-red-500 hover:text-red-700 text-left" onClick={handleRemove}>
+            <button type="button" className="text-xs text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-left" onClick={handleRemove}>
               Supprimer le logo
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-400 leading-relaxed">PNG, JPG, SVG · Max 2 Mo<br />Laisser vide = icône par défaut</p>
+        <p className="text-xs text-gray-400 dark:text-gray-500 leading-relaxed">PNG, JPG, SVG · Max 2 Mo<br />Laisser vide = icône par défaut</p>
       </div>
     </div>
   )
@@ -148,8 +230,8 @@ function LogoUploadField({ value, onChange }: { value: string; onChange: (v: str
 
 function SectionCard({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
-      {title && <h4 className="font-semibold text-gray-800 text-sm border-b border-gray-100 pb-2">{title}</h4>}
+    <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5 space-y-4">
+      {title && <h4 className="font-semibold text-gray-800 dark:text-gray-100 text-sm border-b border-gray-100 dark:border-gray-800 pb-2">{title}</h4>}
       {children}
     </div>
   )
@@ -162,7 +244,7 @@ export default function ContentPage() {
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    getContent().then(setContent)
+    getContent().then(setContent).catch(err => toast.error(getApiError(err)))
   }, [])
 
   const save = async () => {
@@ -173,6 +255,8 @@ export default function ContentPage() {
       setContent(updated)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
+    } catch (err) {
+      toast.error(getApiError(err))
     } finally {
       setSaving(false)
     }
@@ -189,8 +273,8 @@ export default function ContentPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Contenu de la page d'accueil</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Modifiez les textes, images et informations affichés sur le site vitrine.</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Contenu de la page d'accueil</h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Modifiez les textes, images et informations affichés sur le site vitrine.</p>
         </div>
         <button onClick={save} disabled={saving} className="btn-primary gap-2 self-start sm:self-auto">
           {saving
@@ -207,7 +291,7 @@ export default function ContentPage() {
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-              tab === t.key ? 'bg-primary-50 text-primary-700' : 'text-gray-600 bg-gray-100'
+              tab === t.key ? 'bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-400' : 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800'
             }`}>
             <i className={`bi ${t.icon}`} />
             {t.label}
@@ -224,8 +308,8 @@ export default function ContentPage() {
               onClick={() => setTab(t.key)}
               className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors ${
                 tab === t.key
-                  ? 'bg-primary-50 text-primary-700 font-medium'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-400 font-medium'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
               }`}
             >
               <i className={`bi ${t.icon}`} />
@@ -260,7 +344,7 @@ export default function ContentPage() {
           {/* ── Avis clients ── */}
           {tab === 'hotel' && (
             <SectionCard title="Demande d'avis publics">
-              <p className="text-sm text-gray-500 mb-4 -mt-2">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 -mt-2">
                 Après un questionnaire de satisfaction noté 4★ ou plus, le client sera invité à partager son avis sur ces plateformes.
                 Laissez vide pour désactiver.
               </p>
@@ -278,7 +362,7 @@ export default function ContentPage() {
           {/* ── Coordonnées bancaires ── */}
           {tab === 'hotel' && (
             <SectionCard title="Coordonnées bancaires (paiement par virement)">
-              <p className="text-sm text-gray-500 mb-4 -mt-2">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 -mt-2">
                 Affichées au client qui choisit de payer sa réservation en ligne par virement bancaire.
                 Laissez vide pour désactiver cette option de paiement sur le site.
               </p>
@@ -393,14 +477,27 @@ export default function ContentPage() {
             </>
           )}
 
+          {/* ── Vidéo ── */}
+          {tab === 'video' && (
+            <SectionCard title="Vidéo de présentation">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 -mt-2">
+                Affichée juste en dessous de la galerie sur la page d'accueil. Laissez l'URL vide pour masquer cette section.
+              </p>
+              <Field label="Titre affiché au-dessus de la vidéo" value={content.video?.title ?? ''}
+                onChange={v => set('video', { ...content.video, title: v })} />
+              <VideoField label="Vidéo" value={content.video?.url ?? ''}
+                onChange={v => set('video', { ...content.video, url: v })} />
+            </SectionCard>
+          )}
+
           {/* ── Témoignages ── */}
           {tab === 'testimonials' && (
             <>
-              <div className="mb-5 flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-                <i className="bi bi-info-circle-fill text-amber-500 mt-0.5 shrink-0" />
+              <div className="mb-5 flex items-start gap-3 p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-sm text-amber-800 dark:text-amber-200">
+                <i className="bi bi-info-circle-fill text-amber-500 dark:text-amber-400 mt-0.5 shrink-0" />
                 <div>
                   <p className="font-semibold mb-0.5">Avis dynamiques activés</p>
-                  <p className="text-amber-700/80">
+                  <p className="text-amber-700/80 dark:text-amber-300/80">
                     Dès qu'un client soumet un questionnaire avec un commentaire et une note ≥ 4/5,
                     ses avis remplacent automatiquement ceux ci-dessous sur la page d'accueil.
                     Ces témoignages servent uniquement de <strong>contenu de secours</strong> tant qu'il n'y a pas encore de vrais avis.

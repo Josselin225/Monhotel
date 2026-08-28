@@ -27,3 +27,6 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# ── Outils locaux (état interne, pas du code projet) ───────────────────────
+.claude/

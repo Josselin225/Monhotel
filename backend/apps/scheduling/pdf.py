@@ -18,7 +18,7 @@ POSITION_COLORS = {
 FR_DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
 
 
-def generate_schedule_pdf_response(week_start, week_end, users, shifts) -> HttpResponse:
+def generate_schedule_pdf_response(week_start, week_end, employees, shifts) -> HttpResponse:
     from datetime import timedelta
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib import colors
@@ -78,19 +78,17 @@ def generate_schedule_pdf_response(week_start, week_end, users, shifts) -> HttpR
             dayhdr_style,
         ))
 
-    shifts_by_user_day = {}
+    shifts_by_employee_day = {}
     for s in shifts:
-        shifts_by_user_day.setdefault((s.user_id, s.date), []).append(s)
+        shifts_by_employee_day.setdefault((s.employee_id, s.date), []).append(s)
 
     position_labels = dict(Shift.Position.choices)
 
     rows = [header_row]
-    for u in users:
-        full_name = u.get_full_name() or u.username
-        role_display = u.get_role_display() if hasattr(u, 'get_role_display') else ''
-        row = [Paragraph(f"{full_name}<br/><font size=7 color='#6B6660'>{role_display}</font>", emp_style)]
+    for emp in employees:
+        row = [Paragraph(f"{emp.name}<br/><font size=7 color='#6B6660'>{emp.get_position_display()}</font>", emp_style)]
         for d in days:
-            cell_shifts = shifts_by_user_day.get((u.id, d), [])
+            cell_shifts = shifts_by_employee_day.get((emp.id, d), [])
             if not cell_shifts:
                 row.append('')
                 continue
@@ -159,8 +157,8 @@ def generate_schedule_pdf_response(week_start, week_end, users, shifts) -> HttpR
     # Total d'heures par personne
     totals = {}
     for s in shifts:
-        totals.setdefault(s.user_id, {'name': s.user.get_full_name() or s.user.username, 'hours': 0})
-        totals[s.user_id]['hours'] += s.hours
+        totals.setdefault(s.employee_id, {'name': s.employee.name, 'hours': 0})
+        totals[s.employee_id]['hours'] += s.hours
     if totals:
         story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor('#E5E0D5')))
         story.append(Spacer(1, 0.25 * cm))

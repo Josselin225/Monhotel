@@ -2,11 +2,11 @@ import datetime
 
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 
+from mon_hotel_backend.pagination import DefaultPagination
 from .models import Room, RoomType, PricingRule
 from .serializers import RoomSerializer, RoomTypeSerializer, PricingRuleSerializer
 from .pricing import calculate_price
@@ -28,7 +28,7 @@ class RoomTypeViewSet(HotelScopeMixin, viewsets.ModelViewSet):
         return [IsAdminOrManager()]
 
 
-class RoomPagination(PageNumberPagination):
+class RoomPagination(DefaultPagination):
     page_size = 10
 
 

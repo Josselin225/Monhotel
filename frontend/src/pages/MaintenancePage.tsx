@@ -4,6 +4,7 @@ import { maintenanceApi, technicianApi, MaintenanceTicket, Technician, PRIORITY_
 import { roomsApi } from '../api/rooms'
 import { Room } from '../types'
 import { formatDate, formatFcfa, getApiError } from '../utils'
+import { useAuth } from '../context/AuthContext'
 import Pagination from '../components/Pagination'
 import FormField from '../components/FormField'
 import PageHeader from '../components/PageHeader'
@@ -19,7 +20,23 @@ const EMPTY_TECH = { name: '', phone: '', email: '', specialty: '', company: '',
 
 const EMPTY_RESOLVE = { resolution_notes: '', cost: '' }
 
+// Variantes sombres pour les badges de priorité/statut (les couleurs de base viennent de api/maintenance.ts)
+const PRIORITY_DARK: Record<string, string> = {
+  low:    'dark:text-gray-400 dark:bg-gray-800 dark:border-gray-700',
+  medium: 'dark:text-blue-300 dark:bg-blue-900/30 dark:border-blue-800',
+  high:   'dark:text-orange-300 dark:bg-orange-900/30 dark:border-orange-800',
+  urgent: 'dark:text-red-400 dark:bg-red-950/40 dark:border-red-900',
+}
+const STATUS_DARK: Record<string, string> = {
+  open:        'dark:text-amber-300 dark:bg-amber-900/30 dark:border-amber-800',
+  in_progress: 'dark:text-blue-300 dark:bg-blue-900/30 dark:border-blue-800',
+  resolved:    'dark:text-green-300 dark:bg-green-900/30 dark:border-green-800',
+  closed:      'dark:text-gray-400 dark:bg-gray-800 dark:border-gray-700',
+}
+
 export default function MaintenancePage() {
+  const { user } = useAuth()
+  const isManager = user?.role === 'admin' || user?.role === 'manager'
   const [tab, setTab]             = useState<'tickets' | 'technicians'>('tickets')
 
   const [tickets, setTickets]     = useState<MaintenanceTicket[]>([])
@@ -91,14 +108,19 @@ export default function MaintenancePage() {
     setShowModal(true)
   }
 
-  const loadTechnicians = async () => {
+  const loadTechnicians = useCallback(async () => {
     setTechLoading(true)
     try {
       const all = await technicianApi.list()
       setTechnicians(all)
     } catch (err) { toast.error(getApiError(err)) }
     finally { setTechLoading(false) }
-  }
+  }, [])
+
+  // Le chargement initial (load()) ne récupère que les techniciens actifs
+  // (pour le formulaire d'assignation) — l'onglet de gestion doit voir tout
+  // le monde, y compris les inactifs, sans attendre une première création/édition.
+  useEffect(() => { if (tab === 'technicians') loadTechnicians() }, [tab, loadTechnicians])
 
   const openCreateTech = () => { setEditingTech(null); setTechForm(EMPTY_TECH); setShowTechModal(true) }
   const openEditTech = (t: Technician) => {
@@ -186,14 +208,14 @@ export default function MaintenancePage() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           {tab === 'tickets' ? (
             <>
-              <p className="text-sm text-gray-700 font-medium">{total} ticket{total > 1 ? 's' : ''}</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">{total} ticket{total > 1 ? 's' : ''}</p>
               <button onClick={openCreate} className="btn-primary flex items-center gap-2 text-sm self-start sm:self-auto">
                 <i className="bi bi-plus-lg" /> Nouveau ticket
               </button>
             </>
           ) : (
             <>
-              <p className="text-sm text-gray-700 font-medium">{technicians.length} technicien{technicians.length > 1 ? 's' : ''}</p>
+              <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">{technicians.length} technicien{technicians.length > 1 ? 's' : ''}</p>
               <button onClick={openCreateTech} className="btn-primary flex items-center gap-2 text-sm self-start sm:self-auto">
                 <i className="bi bi-plus-lg" /> Nouveau technicien
               </button>
@@ -203,7 +225,7 @@ export default function MaintenancePage() {
       </PageHeader>
 
       {/* Onglets */}
-      <div className="flex gap-1 mb-5 border-b border-gray-200">
+      <div className="flex gap-1 mb-5 border-b border-gray-200 dark:border-gray-700">
         {([
           { key: 'tickets',     label: 'Tickets',     icon: 'bi-tools' },
           { key: 'technicians', label: 'Techniciens', icon: 'bi-person-gear' },
@@ -212,7 +234,7 @@ export default function MaintenancePage() {
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
               tab === t.key
                 ? 'border-hotel-gold text-hotel-gold'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-600'
             }`}>
             <i className={`bi ${t.icon}`} />{t.label}
           </button>
@@ -223,19 +245,19 @@ export default function MaintenancePage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
         {[
-          { label: 'Total',     value: stats.total,       icon: 'bi-ticket',              color: 'text-gray-600 bg-gray-50' },
-          { label: 'Ouverts',   value: stats.open,        icon: 'bi-folder2-open',        color: 'text-amber-600 bg-amber-50' },
-          { label: 'En cours',  value: stats.in_progress, icon: 'bi-tools',               color: 'text-blue-600 bg-blue-50' },
-          { label: 'Résolus',   value: stats.resolved,    icon: 'bi-check-circle-fill',   color: 'text-green-600 bg-green-50' },
-          { label: 'Urgents',   value: stats.urgent,      icon: 'bi-exclamation-triangle-fill', color: 'text-red-600 bg-red-50' },
+          { label: 'Total',     value: stats.total,       icon: 'bi-ticket',              color: 'text-gray-600 bg-gray-50 dark:text-gray-300 dark:bg-gray-800' },
+          { label: 'Ouverts',   value: stats.open,        icon: 'bi-folder2-open',        color: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/30' },
+          { label: 'En cours',  value: stats.in_progress, icon: 'bi-tools',               color: 'text-blue-600 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/30' },
+          { label: 'Résolus',   value: stats.resolved,    icon: 'bi-check-circle-fill',   color: 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-900/30' },
+          { label: 'Urgents',   value: stats.urgent,      icon: 'bi-exclamation-triangle-fill', color: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-950/40' },
         ].map(kpi => (
           <div key={kpi.label} className="card flex items-center gap-3 py-3 px-4">
             <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${kpi.color}`}>
               <i className={`bi ${kpi.icon}`} />
             </div>
             <div>
-              <p className="text-xl font-bold text-gray-900">{kpi.value}</p>
-              <p className="text-xs text-gray-400">{kpi.label}</p>
+              <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{kpi.value}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500">{kpi.label}</p>
             </div>
           </div>
         ))}
@@ -244,11 +266,11 @@ export default function MaintenancePage() {
       {/* Filters */}
       <div className="card mb-4 flex flex-col sm:flex-row gap-3 py-3 items-stretch sm:items-center">
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <i className="bi bi-search text-gray-400" />
+          <i className="bi bi-search text-gray-400 dark:text-gray-500" />
           <input type="text" placeholder="Référence, titre, chambre…"
-            className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-gray-400"
+            className="flex-1 bg-transparent text-sm text-gray-700 dark:text-gray-200 focus:outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500"
             value={filter.search} onChange={e => setFilter({...filter, search: e.target.value})} />
-          {filter.search && <button onClick={() => setFilter({...filter, search: ''})} className="text-gray-400 hover:text-gray-600"><i className="bi bi-x" /></button>}
+          {filter.search && <button onClick={() => setFilter({...filter, search: ''})} className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"><i className="bi bi-x" /></button>}
         </div>
         <select className="input-box w-full sm:w-44" value={filter.status} onChange={e => setFilter({...filter, status: e.target.value})}>
           <option value="">Tous les statuts</option>
@@ -271,61 +293,61 @@ export default function MaintenancePage() {
       ) : (
         <div className="card p-0 overflow-hidden overflow-x-auto">
           <table className="w-full text-sm min-w-[900px]">
-            <thead className="bg-gray-50 border-b border-gray-100">
+            <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
               <tr>
                 {['Réf.','Emplacement','Catégorie','Titre','Priorité','Statut','Signalé le','Actions'].map(h => (
-                  <th key={h} className="text-left px-4 py-3 font-semibold text-gray-700 text-xs uppercase tracking-wider">{h}</th>
+                  <th key={h} className="text-left px-4 py-3 font-semibold text-gray-700 dark:text-gray-300 text-xs uppercase tracking-wider">{h}</th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
               {tickets.map(t => (
-                <tr key={t.id} className="hover:bg-gray-50/60 transition-colors">
-                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{t.reference}</td>
+                <tr key={t.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/60 transition-colors">
+                  <td className="px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400">{t.reference}</td>
                   <td className="px-4 py-3">
                     {t.room_number ? (
-                      <span className="font-medium text-gray-700">Chambre #{t.room_number}</span>
+                      <span className="font-medium text-gray-700 dark:text-gray-300">Chambre #{t.room_number}</span>
                     ) : (
-                      <span className="text-gray-500">{t.location || '—'}</span>
+                      <span className="text-gray-500 dark:text-gray-400">{t.location || '—'}</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">{t.category_display}</td>
+                  <td className="px-4 py-3 text-gray-500 dark:text-gray-400 text-xs">{t.category_display}</td>
                   <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900 truncate max-w-[200px]">{t.title}</p>
-                    {t.description && <p className="text-xs text-gray-500 truncate max-w-[200px]">{t.description}</p>}
+                    <p className="font-medium text-gray-900 dark:text-gray-100 truncate max-w-[200px]">{t.title}</p>
+                    {t.description && <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[200px]">{t.description}</p>}
                     {t.technician_name && (
                       <div className="flex items-center gap-1.5 mt-1">
-                        <i className="bi bi-person-gear text-amber-500 text-[10px]" />
-                        <span className="text-xs text-amber-700 truncate max-w-[180px]">{t.technician_name}</span>
-                        {t.technician_phone && <span className="text-xs text-gray-400">· {t.technician_phone}</span>}
+                        <i className="bi bi-person-gear text-amber-500 dark:text-amber-400 text-[10px]" />
+                        <span className="text-xs text-amber-700 dark:text-amber-400 truncate max-w-[180px]">{t.technician_name}</span>
+                        {t.technician_phone && <span className="text-xs text-gray-400 dark:text-gray-500">· {t.technician_phone}</span>}
                       </div>
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`badge border flex items-center gap-1 w-fit ${PRIORITY_COLORS[t.priority]}`}>
+                    <span className={`badge border flex items-center gap-1 w-fit ${PRIORITY_COLORS[t.priority]} ${PRIORITY_DARK[t.priority] ?? ''}`}>
                       <i className={`bi ${priorityIcon[t.priority]}`} />{t.priority_display}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`badge border ${STATUS_COLORS[t.status]}`}>{t.status_display}</span>
+                    <span className={`badge border ${STATUS_COLORS[t.status]} ${STATUS_DARK[t.status] ?? ''}`}>{t.status_display}</span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600 text-xs">{formatDate(t.created_at)}</td>
+                  <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-xs">{formatDate(t.created_at)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
                       {['open','in_progress'].includes(t.status) && (
                         <button onClick={() => { setShowResolve(t); setResolveForm(EMPTY_RESOLVE) }}
-                          className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors font-medium">
+                          className="text-xs px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors font-medium">
                           <i className="bi bi-check-lg me-1" />Résoudre
                         </button>
                       )}
                       <button onClick={() => openEdit(t)}      className="btn-secondary text-xs px-2 py-1"><i className="bi bi-pencil" /></button>
-                      <button onClick={() => handleDelete(t.id)} className="btn-danger text-xs px-2 py-1"><i className="bi bi-trash" /></button>
+                      {isManager && <button onClick={() => handleDelete(t.id)} className="btn-danger text-xs px-2 py-1"><i className="bi bi-trash" /></button>}
                     </div>
                   </td>
                 </tr>
               ))}
               {tickets.length === 0 && (
-                <tr><td colSpan={8} className="px-4 py-16 text-center text-gray-400">
+                <tr><td colSpan={8} className="px-4 py-16 text-center text-gray-400 dark:text-gray-500">
                   <i className="bi bi-tools text-3xl block mb-2 opacity-30" />
                   Aucun ticket de maintenance
                 </td></tr>
@@ -347,36 +369,36 @@ export default function MaintenancePage() {
           ) : (
             <div className="card p-0 overflow-hidden overflow-x-auto">
               <table className="w-full text-sm min-w-[700px]">
-                <thead className="bg-gray-50 border-b border-gray-100">
+                <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
                   <tr>
                     {['Nom','Spécialité','Entreprise','Contact','Tickets','Statut','Actions'].map(h => (
-                      <th key={h} className="text-left px-4 py-3 font-semibold text-gray-700 text-xs uppercase tracking-wider">{h}</th>
+                      <th key={h} className="text-left px-4 py-3 font-semibold text-gray-700 dark:text-gray-300 text-xs uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                   {technicians.map(tech => (
-                    <tr key={tech.id} className="hover:bg-gray-50/60 transition-colors">
+                    <tr key={tech.id} className="hover:bg-gray-50/60 dark:hover:bg-gray-800/60 transition-colors">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-                            <span className="text-amber-700 text-sm font-bold">{tech.name.charAt(0).toUpperCase()}</span>
+                          <div className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                            <span className="text-amber-700 dark:text-amber-300 text-sm font-bold">{tech.name.charAt(0).toUpperCase()}</span>
                           </div>
-                          <span className="font-medium text-gray-900">{tech.name}</span>
+                          <span className="font-medium text-gray-900 dark:text-gray-100">{tech.name}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="badge border text-blue-700 bg-blue-50 border-blue-200">{tech.specialty_display}</span>
+                        <span className="badge border text-blue-700 bg-blue-50 border-blue-200 dark:text-blue-300 dark:bg-blue-900/30 dark:border-blue-800">{tech.specialty_display}</span>
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">{tech.company || '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-sm">{tech.company || '—'}</td>
                       <td className="px-4 py-3">
-                        {tech.phone && <p className="text-sm text-gray-700"><i className="bi bi-telephone me-1 text-gray-400" />{tech.phone}</p>}
-                        {tech.email && <p className="text-xs text-gray-500"><i className="bi bi-envelope me-1 text-gray-400" />{tech.email}</p>}
-                        {!tech.phone && !tech.email && <span className="text-gray-400">—</span>}
+                        {tech.phone && <p className="text-sm text-gray-700 dark:text-gray-300"><i className="bi bi-telephone me-1 text-gray-400 dark:text-gray-500" />{tech.phone}</p>}
+                        {tech.email && <p className="text-xs text-gray-500 dark:text-gray-400"><i className="bi bi-envelope me-1 text-gray-400 dark:text-gray-500" />{tech.email}</p>}
+                        {!tech.phone && !tech.email && <span className="text-gray-400 dark:text-gray-500">—</span>}
                       </td>
-                      <td className="px-4 py-3 text-gray-600 text-sm">{tech.tickets_count}</td>
+                      <td className="px-4 py-3 text-gray-600 dark:text-gray-400 text-sm">{tech.tickets_count}</td>
                       <td className="px-4 py-3">
-                        <span className={`badge border ${tech.is_active ? 'text-green-700 bg-green-50 border-green-200' : 'text-gray-500 bg-gray-100 border-gray-200'}`}>
+                        <span className={`badge border ${tech.is_active ? 'text-green-700 bg-green-50 border-green-200 dark:text-green-300 dark:bg-green-900/30 dark:border-green-800' : 'text-gray-500 bg-gray-100 border-gray-200 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-700'}`}>
                           {tech.is_active ? 'Actif' : 'Inactif'}
                         </span>
                       </td>
@@ -389,7 +411,7 @@ export default function MaintenancePage() {
                     </tr>
                   ))}
                   {technicians.length === 0 && (
-                    <tr><td colSpan={7} className="px-4 py-16 text-center text-gray-400">
+                    <tr><td colSpan={7} className="px-4 py-16 text-center text-gray-400 dark:text-gray-500">
                       <i className="bi bi-person-gear text-3xl block mb-2 opacity-30" />
                       Aucun technicien enregistré
                     </td></tr>
@@ -407,15 +429,15 @@ export default function MaintenancePage() {
           <div className="modal-box max-w-lg">
             <div className="modal-header">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center">
-                  <i className="bi bi-tools text-orange-600 text-lg" />
+                <div className="w-9 h-9 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center">
+                  <i className="bi bi-tools text-orange-600 dark:text-orange-400 text-lg" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">{editing ? `Ticket ${editing.reference}` : 'Nouveau ticket'}</h3>
-                  <p className="text-xs text-gray-400">{editing ? 'Modifier le ticket' : 'Signaler un problème'}</p>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editing ? `Ticket ${editing.reference}` : 'Nouveau ticket'}</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">{editing ? 'Modifier le ticket' : 'Signaler un problème'}</p>
                 </div>
               </div>
-              <button onClick={() => setShowModal(false)} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
+              <button onClick={() => setShowModal(false)} className="w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                 <i className="bi bi-x-lg text-sm" />
               </button>
             </div>
@@ -480,10 +502,10 @@ export default function MaintenancePage() {
               <FormField label="Description" icon="bi-card-text">
                 <textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})}
                   placeholder="Décrivez le problème en détail…" rows={3}
-                  className="block w-full bg-transparent border-0 border-b-2 border-gray-200 pl-9 pr-0 py-2.5 text-sm focus:outline-none focus:ring-0 focus:border-amber-500 placeholder:text-gray-400 resize-none" />
+                  className="block w-full bg-transparent border-0 border-b-2 border-gray-200 dark:border-gray-700 pl-9 pr-0 py-2.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 focus:border-amber-500 placeholder:text-gray-400 dark:placeholder:text-gray-500 resize-none" />
               </FormField>
 
-              <div className="flex gap-3 justify-end pt-2 border-t border-gray-100">
+              <div className="flex gap-3 justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
                 <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Annuler</button>
                 <button type="submit" disabled={saving} className="btn-primary min-w-[120px] justify-center">
                   {saving ? <i className="bi bi-arrow-repeat animate-spin" /> : <><i className={`bi ${editing ? 'bi-check-lg' : 'bi-plus-lg'}`} />{editing ? 'Enregistrer' : 'Créer'}</>}
@@ -500,15 +522,15 @@ export default function MaintenancePage() {
           <div className="modal-box max-w-md">
             <div className="modal-header">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-green-100 flex items-center justify-center">
-                  <i className="bi bi-check-circle text-green-600 text-lg" />
+                <div className="w-9 h-9 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                  <i className="bi bi-check-circle text-green-600 dark:text-green-400 text-lg" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">Résoudre le ticket</h3>
-                  <p className="text-xs text-gray-400 truncate max-w-[240px]">{showResolve.title}</p>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">Résoudre le ticket</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 truncate max-w-[240px]">{showResolve.title}</p>
                 </div>
               </div>
-              <button onClick={() => setShowResolve(null)} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
+              <button onClick={() => setShowResolve(null)} className="w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                 <i className="bi bi-x-lg text-sm" />
               </button>
             </div>
@@ -516,13 +538,13 @@ export default function MaintenancePage() {
               <FormField label="Notes de résolution" icon="bi-card-text">
                 <textarea value={resolveForm.resolution_notes} onChange={e => setResolveForm({...resolveForm, resolution_notes: e.target.value})}
                   placeholder="Décrivez ce qui a été fait…" rows={3}
-                  className="block w-full bg-transparent border-0 border-b-2 border-gray-200 pl-9 pr-0 py-2.5 text-sm focus:outline-none focus:ring-0 focus:border-amber-500 placeholder:text-gray-400 resize-none" />
+                  className="block w-full bg-transparent border-0 border-b-2 border-gray-200 dark:border-gray-700 pl-9 pr-0 py-2.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 focus:border-amber-500 placeholder:text-gray-400 dark:placeholder:text-gray-500 resize-none" />
               </FormField>
               <FormField label="Coût de l'intervention (FCFA)" icon="bi-cash-coin">
                 <input type="number" min="0" placeholder="0 (optionnel)"
                   value={resolveForm.cost} onChange={e => setResolveForm({...resolveForm, cost: e.target.value})} />
               </FormField>
-              <div className="flex gap-3 justify-end pt-2 border-t border-gray-100">
+              <div className="flex gap-3 justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
                 <button type="button" onClick={() => setShowResolve(null)} className="btn-secondary">Annuler</button>
                 <button type="submit" disabled={resolving} className="btn-primary min-w-[120px] justify-center">
                   {resolving ? <i className="bi bi-arrow-repeat animate-spin" /> : <><i className="bi bi-check-lg me-1" />Marquer résolu</>}
@@ -539,15 +561,15 @@ export default function MaintenancePage() {
           <div className="modal-box max-w-lg">
             <div className="modal-header">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center">
-                  <i className="bi bi-person-gear text-amber-600 text-lg" />
+                <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                  <i className="bi bi-person-gear text-amber-600 dark:text-amber-400 text-lg" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">{editingTech ? 'Modifier le technicien' : 'Nouveau technicien'}</h3>
-                  <p className="text-xs text-gray-400">Prestataire externe de maintenance</p>
+                  <h3 className="font-semibold text-gray-900 dark:text-gray-100">{editingTech ? 'Modifier le technicien' : 'Nouveau technicien'}</h3>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Prestataire externe de maintenance</p>
                 </div>
               </div>
-              <button onClick={() => setShowTechModal(false)} className="w-8 h-8 rounded-lg hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 transition-colors">
+              <button onClick={() => setShowTechModal(false)} className="w-8 h-8 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center justify-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
                 <i className="bi bi-x-lg text-sm" />
               </button>
             </div>
@@ -585,18 +607,18 @@ export default function MaintenancePage() {
               <FormField label="Notes" icon="bi-card-text">
                 <textarea value={techForm.notes} onChange={e => setTechForm({...techForm, notes: e.target.value})}
                   placeholder="Informations supplémentaires, tarifs, disponibilités…" rows={2}
-                  className="block w-full bg-transparent border-0 border-b-2 border-gray-200 pl-9 pr-0 py-2.5 text-sm focus:outline-none focus:ring-0 focus:border-amber-500 placeholder:text-gray-400 resize-none" />
+                  className="block w-full bg-transparent border-0 border-b-2 border-gray-200 dark:border-gray-700 pl-9 pr-0 py-2.5 text-sm text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-0 focus:border-amber-500 placeholder:text-gray-400 dark:placeholder:text-gray-500 resize-none" />
               </FormField>
 
               {editingTech && (
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" checked={techForm.is_active} onChange={e => setTechForm({...techForm, is_active: e.target.checked})}
-                    className="w-4 h-4 rounded border-gray-300 text-hotel-gold" />
-                  <span className="text-sm text-gray-700">Technicien actif</span>
+                    className="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-hotel-gold" />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">Technicien actif</span>
                 </label>
               )}
 
-              <div className="flex gap-3 justify-end pt-2 border-t border-gray-100">
+              <div className="flex gap-3 justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
                 <button type="button" onClick={() => setShowTechModal(false)} className="btn-secondary">Annuler</button>
                 <button type="submit" disabled={savingTech} className="btn-primary min-w-[120px] justify-center">
                   {savingTech ? <i className="bi bi-arrow-repeat animate-spin" /> : <><i className={`bi ${editingTech ? 'bi-check-lg' : 'bi-plus-lg'}`} />{editingTech ? 'Enregistrer' : 'Ajouter'}</>}

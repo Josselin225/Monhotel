@@ -25,6 +25,8 @@ export interface BookingConfirmation {
   total_price: string
   price_per_night: string
   payment_method: 'on_site' | 'transfer'
+  restaurant_reserved: boolean
+  restaurant_occasions: number
 }
 
 export interface PublicBookingInput {
@@ -39,6 +41,19 @@ export interface PublicBookingInput {
   children?: number
   special_requests?: string
   payment_method?: 'on_site' | 'transfer'
+  restaurant_meals?: { meal: 'breakfast' | 'lunch' | 'dinner'; time: string }[]
+  restaurant_frequency?: 'once' | 'daily'
+  restaurant_date?: string
+  restaurant_party_size?: number
+}
+
+export interface PublicMenuItem {
+  id: number
+  name: string
+  description: string
+  category: string
+  category_display: string
+  price: string
 }
 
 export async function getAvailableRooms(check_in: string, check_out: string): Promise<PublicRoomType[]> {
@@ -48,6 +63,11 @@ export async function getAvailableRooms(check_in: string, check_out: string): Pr
 
 export async function createPublicBooking(booking: PublicBookingInput): Promise<BookingConfirmation> {
   const { data } = await publicApi.post('/public/book/', booking)
+  return data
+}
+
+export async function getPublicMenu(): Promise<PublicMenuItem[]> {
+  const { data } = await publicApi.get('/menu-items/public/')
   return data
 }
 

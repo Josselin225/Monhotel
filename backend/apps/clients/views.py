@@ -140,7 +140,7 @@ class ClientViewSet(HotelScopeMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], permission_classes=[IsAdminOrManager])
     def export_xlsx(self, request):
         from openpyxl import Workbook
-        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side, GradientFill
+        from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
         from openpyxl.utils import get_column_letter
 
         wb = Workbook()
@@ -204,9 +204,20 @@ class ClientViewSet(HotelScopeMixin, viewsets.ModelViewSet):
         from django.core.cache import cache
         from django.utils import timezone
         from datetime import timedelta
+
+        def _int_param(name, default, lo, hi):
+            try:
+                return max(lo, min(hi, int(request.query_params.get(name, default))))
+            except (TypeError, ValueError):
+                return default
+
+        top_limit       = _int_param('top_limit', 10, 1, 50)
+        birthdays_limit = _int_param('birthdays_limit', 5, 1, 50)
+        birthdays_days  = _int_param('birthdays_days', 30, 1, 365)
+
         now = timezone.now()
         hotel = self.get_hotel()
-        cache_key = f'client_stats_{hotel.pk if hotel else "none"}_{now.strftime("%Y-%m-%d-%H")}'
+        cache_key = f'client_stats_{hotel.pk if hotel else "none"}_{now.strftime("%Y-%m-%d-%H")}_{top_limit}_{birthdays_limit}_{birthdays_days}'
         cached = cache.get(cache_key)
         if cached:
             return Response(cached)
@@ -223,7 +234,7 @@ class ClientViewSet(HotelScopeMixin, viewsets.ModelViewSet):
         for c in (
             qs
             .annotate(lv=Sum('bookings__total_price'), bk_count=Count('bookings'))
-            .order_by('-lv')[:5]
+            .order_by('-lv')[:top_limit]
         ):
             top_clients.append({
                 'id': c.id,
@@ -233,12 +244,13 @@ class ClientViewSet(HotelScopeMixin, viewsets.ModelViewSet):
                 'bookings_count': c.bk_count or 0,
             })
 
-        # Upcoming birthdays (next 30 days) — DB-filtered first, Python-calculated after
+        # Anniversaires à venir (fenêtre configurable) — filtrage BDD d'abord, calcul Python ensuite
         today = now.date()
         months = {today.month}
         nxt = today.replace(day=28)  # safe way to advance month
         import datetime
-        for _ in range(2):
+        months_ahead = birthdays_days // 28 + 2
+        for _ in range(months_ahead):
             nxt = (nxt + datetime.timedelta(days=4)).replace(day=1)
             months.add(nxt.month)
 
@@ -256,7 +268,7 @@ class ClientViewSet(HotelScopeMixin, viewsets.ModelViewSet):
                 if bday < today:
                     bday = bday.replace(year=today.year + 1)
                 days_until = (bday - today).days
-                if 0 <= days_until <= 30:
+                if 0 <= days_until <= birthdays_days:
                     birthdays.append({
                         'id': c.id,
                         'full_name': c.full_name,
@@ -273,7 +285,7 @@ class ClientViewSet(HotelScopeMixin, viewsets.ModelViewSet):
             'vvip_count': vvip_count,
             'new_this_month': new_this_month,
             'top_clients': top_clients,
-            'upcoming_birthdays': birthdays[:5],
+            'upcoming_birthdays': birthdays[:birthdays_limit],
         }
         cache.set(cache_key, result, timeout=300)
         return Response(result)
@@ -305,7 +317,11 @@ class ClientNoteListCreateView(generics.ListCreateAPIView):
 
 class ClientNoteDeleteView(generics.DestroyAPIView):
     serializer_class = ClientNoteSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAdminOrManager]
 
     def get_queryset(self):
-        return ClientNote.objects.filter(client_id=self.kwargs['client_pk'])
+        hotel = getattr(self.request.user, 'hotel', None)
+        qs = ClientNote.objects.filter(client_id=self.kwargs['client_pk'])
+        if hotel is not None:
+            qs = qs.filter(client__hotel=hotel)
+        return qs

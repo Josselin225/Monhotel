@@ -27,9 +27,13 @@ TRACKED = {
     'maintenance.Technician':        'Technicien',
     'maintenance.MaintenanceTicket': 'Ticket maintenance',
     'scheduling.Shift':              'Créneau personnel',
+    'scheduling.Employee':           'Employé',
     'inventory.InventoryCategory':   'Catégorie de stock',
     'inventory.InventoryItem':       'Article de stock',
     'inventory.InventoryMovement':   'Mouvement de stock',
+    'rfid.RfidCard':                 'Carte RFID',
+    'amenities.AmenityReservation':  'Réservation de service',
+    'amenities.MenuItem':            'Plat du menu',
 }
 
 # Champs jamais consignés (bruit ou sensibles)

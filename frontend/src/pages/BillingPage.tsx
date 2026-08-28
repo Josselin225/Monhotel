@@ -12,9 +12,12 @@ import FormField from '../components/FormField'
 import PageHeader from '../components/PageHeader'
 import { SkeletonTablePage } from '../components/Skeleton'
 import { useAppSettings } from '../hooks/useAppSettings'
+import { useAuth } from '../context/AuthContext'
 
 export default function BillingPage() {
   useAppSettings()
+  const { user } = useAuth()
+  const isManager = user?.role === 'admin' || user?.role === 'manager'
   const [hotelInfo, setHotelInfo] = useState<HotelInfo | undefined>(undefined)
   useEffect(() => { getContent().then(c => setHotelInfo(c.hotel)).catch(() => {}) }, [])
   const [invoices, setInvoices] = useState<Invoice[]>([])
@@ -102,9 +105,11 @@ export default function BillingPage() {
             <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2 text-sm">
               <i className="bi bi-printer" /> Imprimer
             </button>
-            <button onClick={openCreate} className="btn-primary flex items-center gap-2 text-sm">
-              <i className="bi bi-plus-lg" /> Nouvelle facture
-            </button>
+            {isManager && (
+              <button onClick={openCreate} className="btn-primary flex items-center gap-2 text-sm">
+                <i className="bi bi-plus-lg" /> Nouvelle facture
+              </button>
+            )}
           </div>
         </div>
       </PageHeader>
@@ -170,12 +175,12 @@ export default function BillingPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 flex-wrap">
-                      {inv.status === 'draft' && (
+                      {isManager && inv.status === 'draft' && (
                         <button onClick={() => handleIssue(inv.id)} className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 font-medium">
                           Émettre
                         </button>
                       )}
-                      {(inv.status === 'issued' || inv.status === 'draft') && (
+                      {isManager && (inv.status === 'issued' || inv.status === 'draft') && (
                         <button onClick={() => { setShowPayModal(inv); setPayMethod('cash') }} className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 font-medium">
                           Payer
                         </button>

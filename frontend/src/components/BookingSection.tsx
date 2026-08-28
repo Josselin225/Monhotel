@@ -1,5 +1,26 @@
-import { useState } from 'react'
-import { getAvailableRooms, createPublicBooking, PublicRoomType, BookingConfirmation } from '../api/public'
+import { useState, useEffect, useRef } from 'react'
+import { getAvailableRooms, createPublicBooking, getPublicMenu, PublicRoomType, BookingConfirmation, PublicMenuItem } from '../api/public'
+
+const MENU_CATEGORY_ORDER = ['starter', 'main', 'dessert', 'drink']
+
+const MEALS = [
+  { key: 'breakfast', label: 'Petit-déjeuner', time: '08:00' },
+  { key: 'lunch',     label: 'Déjeuner',       time: '12:30' },
+  { key: 'dinner',    label: 'Dîner',          time: '19:30' },
+] as const
+
+/** Chaque date de séjour de check-in (inclus) à check-out (exclu) — une par nuit. */
+function stayDates(checkIn: string, checkOut: string): string[] {
+  if (!checkIn || !checkOut) return []
+  const dates: string[] = []
+  const cur = new Date(checkIn + 'T00:00:00')
+  const end = new Date(checkOut + 'T00:00:00')
+  while (cur < end) {
+    dates.push(cur.toISOString().slice(0, 10))
+    cur.setDate(cur.getDate() + 1)
+  }
+  return dates
+}
 
 function fmt(n: number | string) {
   return new Intl.NumberFormat('fr-FR').format(Number(n)) + ' FCFA'
@@ -39,7 +60,7 @@ function esc(s: string) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-function printReceipt(c: BookingConfirmation, hotel: HotelMeta, clientName: string) {
+function printReceipt(c: BookingConfirmation, hotel: HotelMeta, clientName: string, restaurant: { meals: { label: string; time: string }[]; dates: string[]; party_size: number } | null) {
   const hotelName = hotel.name ?? 'Mon Hôtel'
   const win = window.open('', '_blank', 'width=620,height=850')
   if (!win) return
@@ -59,6 +80,18 @@ function printReceipt(c: BookingConfirmation, hotel: HotelMeta, clientName: stri
       <span class="key">${k}</span>
       <span class="val">${v}</span>
     </div>`).join('')
+
+  const restaurantRows = restaurant ? [
+    ...restaurant.meals.map(m => [m.label, m.time]),
+    restaurant.dates.length > 1
+      ? ['Dates', `${restaurant.dates.length} occasions (${fmtDate(restaurant.dates[0])} → ${fmtDate(restaurant.dates[restaurant.dates.length - 1])})`]
+      : ['Date', fmtDate(restaurant.dates[0])],
+    ['Personnes', `${restaurant.party_size}`],
+  ].map(([k, v]) => `
+    <div class="row">
+      <span class="key">${k}</span>
+      <span class="val">${esc(v)}</span>
+    </div>`).join('') : ''
 
   const bankRows = c.payment_method === 'transfer' ? [
     ['Banque', hotel.bank_name],
@@ -124,6 +157,9 @@ function printReceipt(c: BookingConfirmation, hotel: HotelMeta, clientName: stri
     <div class="status-label">Statut</div>
     <span class="badge">En attente de confirmation</span>
   </div>
+  ${restaurantRows ? `
+  <div class="section-title">Réservation restaurant</div>
+  <div style="margin-bottom:20px">${restaurantRows}</div>` : ''}
   ${bankRows ? `
   <div class="section-title">Virement bancaire à effectuer</div>
   <div style="margin-bottom:20px">${bankRows}</div>
@@ -161,6 +197,32 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState('')
   const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
+
+  // Fait défiler vers le message d'erreur dès qu'il apparaît : sur un long
+  // formulaire (mobile notamment), l'utilisateur reste scrollé sur le bouton
+  // "Confirmer" et ne voit sinon ni l'erreur ni le moyen de revenir en arrière.
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [error])
+
+  const [menu, setMenu] = useState<PublicMenuItem[]>([])
+  const [wantsRestaurant, setWantsRestaurant] = useState(false)
+  const [restaurantForm, setRestaurantForm] = useState({
+    meals: [] as ('breakfast' | 'lunch' | 'dinner')[],
+    times: { breakfast: '08:00', lunch: '12:30', dinner: '19:30' } as Record<'breakfast' | 'lunch' | 'dinner', string>,
+    frequency: 'once' as 'once' | 'daily',
+    date: '', party_size: 2,
+  })
+
+  const toggleMeal = (key: 'breakfast' | 'lunch' | 'dinner') => {
+    setRestaurantForm(f => ({
+      ...f,
+      meals: f.meals.includes(key) ? f.meals.filter(m => m !== key) : [...f.meals, key],
+    }))
+  }
+
+  useEffect(() => { getPublicMenu().then(setMenu).catch(() => {}) }, [])
 
   const nights = (checkIn && checkOut)
     ? Math.max(0, Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000))
@@ -184,6 +246,7 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
   const handlePickRoom = (rt: PublicRoomType) => {
     if (rt.available_count === 0) return
     setSelected(rt)
+    setRestaurantForm(f => ({ ...f, date: checkIn }))
     setStep(2)
   }
 
@@ -191,6 +254,10 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selected) return
+    if (wantsRestaurant && restaurantForm.meals.length === 0) {
+      setError('Sélectionnez au moins un repas, ou décochez la réservation au restaurant.')
+      return
+    }
     setError('')
     setLoading(true)
     try {
@@ -202,6 +269,12 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
         adults, children,
         special_requests: form.special_requests,
         payment_method: bankReady ? paymentMethod : 'on_site',
+        ...(wantsRestaurant && restaurantForm.meals.length > 0 ? {
+          restaurant_meals: restaurantForm.meals.map(m => ({ meal: m, time: restaurantForm.times[m] })),
+          restaurant_frequency: restaurantForm.frequency,
+          restaurant_party_size: restaurantForm.party_size,
+          ...(restaurantForm.frequency === 'once' ? { restaurant_date: restaurantForm.date } : {}),
+        } : {}),
       })
       setConfirmation(conf)
       setStep(3)
@@ -216,6 +289,8 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
     setConfirmation(null); setError('')
     setForm({ first_name: '', last_name: '', phone: '', email: '', special_requests: '' })
     setPaymentMethod('on_site')
+    setWantsRestaurant(false)
+    setRestaurantForm({ meals: [], times: { breakfast: '08:00', lunch: '12:30', dinner: '19:30' }, frequency: 'once', date: '', party_size: 2 })
   }
 
   return (
@@ -258,7 +333,7 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
 
         {/* Error banner */}
         {error && (
-          <div className="mb-6 p-4 bg-red-950/60 border border-red-800/50 rounded-xl text-red-300 text-sm flex items-center gap-3">
+          <div ref={errorRef} className="mb-6 p-4 bg-red-950/60 border border-red-800/50 rounded-xl text-red-300 text-sm flex items-center gap-3 scroll-mt-24">
             <i className="bi bi-exclamation-circle text-lg shrink-0" />
             <span>{error}</span>
           </div>
@@ -326,12 +401,12 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
         {/* ── STEP 1 : Choix de chambre ── */}
         {step === 1 && (
           <div>
-            {/* Résumé + retour */}
+            <button type="button" onClick={() => setStep(0)}
+              className="mb-4 text-xs text-hotel-gold/70 hover:text-hotel-gold transition-colors flex items-center gap-1.5 font-medium">
+              <i className="bi bi-arrow-left" /> Retour aux dates / voyageurs
+            </button>
+            {/* Résumé */}
             <div className="flex items-start gap-3 mb-6">
-              <button type="button" onClick={() => setStep(0)}
-                className="mt-0.5 w-9 h-9 rounded-full bg-white/8 border border-white/15 text-white/60 hover:text-white hover:border-white/30 transition-colors flex items-center justify-center shrink-0">
-                <i className="bi bi-arrow-left" />
-              </button>
               <div>
                 <p className="text-white font-semibold">
                   {nights} nuit{nights > 1 ? 's' : ''} · {fmtDate(checkIn)} → {fmtDate(checkOut)}
@@ -404,6 +479,16 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
         {/* ── STEP 2 : Informations personnelles ── */}
         {step === 2 && selected && (
           <form onSubmit={handleSubmit}>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 mb-4">
+              <button type="button" onClick={() => setStep(1)}
+                className="text-xs text-hotel-gold/70 hover:text-hotel-gold transition-colors flex items-center gap-1.5 font-medium">
+                <i className="bi bi-arrow-left" /> Retour au choix de la chambre
+              </button>
+              <button type="button" onClick={() => setStep(0)}
+                className="text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1.5 font-medium">
+                <i className="bi bi-arrow-left" /> Retour aux dates / voyageurs
+              </button>
+            </div>
             {/* Récap de la sélection */}
             <div className="bg-hotel-gold/10 border border-hotel-gold/20 rounded-2xl p-5 mb-6">
               <div className="flex items-start justify-between gap-4">
@@ -421,10 +506,6 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
                   <p className="text-white/30 text-xs">{fmt(selected.base_price)} × {nights}n</p>
                 </div>
               </div>
-              <button type="button" onClick={() => setStep(1)}
-                className="mt-3 text-xs text-hotel-gold/60 hover:text-hotel-gold transition-colors flex items-center gap-1">
-                <i className="bi bi-pencil text-[10px]" /> Modifier la sélection
-              </button>
             </div>
 
             <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
@@ -461,6 +542,112 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
                 <textarea rows={3} className={`${INPUT} resize-none`} value={form.special_requests}
                   placeholder="Chambre non-fumeur, lit supplémentaire, étage élevé…"
                   onChange={e => setForm({ ...form, special_requests: e.target.value })} />
+              </div>
+
+              {/* Réservation restaurant optionnelle */}
+              <div className="border border-white/10 rounded-xl p-4 bg-white/5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" checked={wantsRestaurant} onChange={e => setWantsRestaurant(e.target.checked)}
+                    className="w-4 h-4 accent-hotel-gold" />
+                  <span className="text-sm font-semibold text-white flex items-center gap-1.5">
+                    <i className="bi bi-cup-hot text-hotel-gold" /> Réserver une table au restaurant
+                  </span>
+                </label>
+
+                {wantsRestaurant && (
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <label className="block text-xs text-white/40 uppercase tracking-widest mb-2">Repas (un ou plusieurs)</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {MEALS.map(m => (
+                          <button key={m.key} type="button"
+                            onClick={() => toggleMeal(m.key)}
+                            className={`text-center rounded-lg border px-2 py-2.5 text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                              restaurantForm.meals.includes(m.key)
+                                ? 'border-hotel-gold bg-hotel-gold/15 text-hotel-gold'
+                                : 'border-white/15 text-white/60 hover:border-white/30'
+                            }`}>
+                            {restaurantForm.meals.includes(m.key) && <i className="bi bi-check-lg text-[10px]" />}
+                            {m.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {restaurantForm.meals.length > 0 && (
+                      <div className="space-y-2">
+                        <label className="block text-xs text-white/40 uppercase tracking-widest mb-2">Heure de chaque repas</label>
+                        {MEALS.filter(m => restaurantForm.meals.includes(m.key)).map(m => (
+                          <div key={m.key} className="flex items-center gap-3">
+                            <span className="text-xs text-white/60 w-28 shrink-0">{m.label}</span>
+                            <input type="time" className={`${INPUT} flex-1`} value={restaurantForm.times[m.key]}
+                              onChange={e => setRestaurantForm({ ...restaurantForm, times: { ...restaurantForm.times, [m.key]: e.target.value } })} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-xs text-white/40 uppercase tracking-widest mb-2">Fréquence</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setRestaurantForm({ ...restaurantForm, frequency: 'daily' })}
+                          className={`text-left rounded-lg border px-3 py-2.5 text-xs font-medium transition-all ${
+                            restaurantForm.frequency === 'daily'
+                              ? 'border-hotel-gold bg-hotel-gold/15 text-hotel-gold'
+                              : 'border-white/15 text-white/60 hover:border-white/30'
+                          }`}>
+                          Chaque jour de mon séjour
+                          {nights > 0 && <span className="block text-white/30 font-normal mt-0.5">{nights} occasion{nights > 1 ? 's' : ''}</span>}
+                        </button>
+                        <button type="button" onClick={() => setRestaurantForm({ ...restaurantForm, frequency: 'once' })}
+                          className={`text-left rounded-lg border px-3 py-2.5 text-xs font-medium transition-all ${
+                            restaurantForm.frequency === 'once'
+                              ? 'border-hotel-gold bg-hotel-gold/15 text-hotel-gold'
+                              : 'border-white/15 text-white/60 hover:border-white/30'
+                          }`}>
+                          Une seule fois
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className={`grid grid-cols-1 ${restaurantForm.frequency === 'once' ? 'sm:grid-cols-2' : ''} gap-4`}>
+                      {restaurantForm.frequency === 'once' && (
+                        <div>
+                          <label className="block text-xs text-white/40 uppercase tracking-widest mb-2">Date</label>
+                          <input type="date" className={INPUT} value={restaurantForm.date} min={checkIn} max={checkOut}
+                            onChange={e => setRestaurantForm({ ...restaurantForm, date: e.target.value })} />
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-xs text-white/40 uppercase tracking-widest mb-2">Personnes</label>
+                        <input type="number" min={1} max={20} className={INPUT} value={restaurantForm.party_size}
+                          onChange={e => setRestaurantForm({ ...restaurantForm, party_size: Number(e.target.value) })} />
+                      </div>
+                    </div>
+
+                    {menu.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-white/40 uppercase tracking-widest mb-2">Menu du jour</p>
+                        <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                          {MENU_CATEGORY_ORDER.filter(cat => menu.some(m => m.category === cat)).map(cat => (
+                            <div key={cat}>
+                              <p className="text-xs font-medium text-hotel-gold mb-1">{menu.find(m => m.category === cat)?.category_display}</p>
+                              {menu.filter(m => m.category === cat).map(item => (
+                                <div key={item.id} className="flex justify-between items-start text-sm py-1 border-b border-white/10 last:border-0">
+                                  <div>
+                                    <p className="text-white/80">{item.name}</p>
+                                    {item.description && <p className="text-xs text-white/30">{item.description}</p>}
+                                  </div>
+                                  <span className="text-white/50 font-medium shrink-0 ml-3">{fmt(item.price)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {bankReady && (
@@ -538,6 +725,16 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
                 ))}
               </div>
 
+              {confirmation.restaurant_reserved && (
+                <p className="mt-4 pt-4 border-t border-white/10 text-sm text-hotel-gold flex items-center justify-center gap-2 text-center">
+                  <i className="bi bi-cup-hot shrink-0" />
+                  {MEALS.filter(m => restaurantForm.meals.includes(m.key)).map(m => m.label).join(', ')} demandé{restaurantForm.meals.length > 1 ? 's' : ''}
+                  {restaurantForm.frequency === 'daily'
+                    ? ` chaque jour de votre séjour (${confirmation.restaurant_occasions} occasion${confirmation.restaurant_occasions > 1 ? 's' : ''})`
+                    : ` le ${fmtDate(restaurantForm.date)}`}.
+                </p>
+              )}
+
               <div className="mt-5 pt-4 border-t border-white/10">
                 <p className="text-white/30 text-xs text-center leading-relaxed">
                   Statut initial : <span className="text-yellow-500">En attente de confirmation</span>
@@ -573,7 +770,11 @@ export default function BookingSection({ initialCheckIn = '', initialCheckOut = 
 
             <div className="flex flex-wrap gap-3 justify-center">
               <button
-                onClick={() => printReceipt(confirmation, hotelMeta, `${form.first_name} ${form.last_name}`)}
+                onClick={() => printReceipt(confirmation, hotelMeta, `${form.first_name} ${form.last_name}`, confirmation.restaurant_reserved ? {
+                  meals: MEALS.filter(m => restaurantForm.meals.includes(m.key)).map(m => ({ label: m.label, time: restaurantForm.times[m.key] })),
+                  dates: restaurantForm.frequency === 'daily' ? stayDates(checkIn, checkOut) : [restaurantForm.date],
+                  party_size: restaurantForm.party_size,
+                } : null)}
                 className="px-8 py-3 bg-hotel-gold text-white rounded-xl hover:brightness-110 transition-all text-sm font-semibold flex items-center gap-2"
               >
                 <i className="bi bi-printer" /> Imprimer le reçu

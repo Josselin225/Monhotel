@@ -6,9 +6,9 @@ import { getApiError, mediaUrl } from '../utils'
 import FormField from '../components/FormField'
 
 const ROLE_COLORS: Record<string, string> = {
-  admin:        'bg-red-100 text-red-700',
-  manager:      'bg-purple-100 text-purple-700',
-  receptionist: 'bg-blue-100 text-blue-700',
+  admin:        'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300',
+  manager:      'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300',
+  receptionist: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
 }
 const ROLE_ICONS: Record<string, string> = {
   admin:        'bi-shield-fill',
@@ -157,16 +157,16 @@ export default function ProfilePage() {
         </div>
 
         <div className="text-center sm:text-left flex-1">
-          <h2 className="text-2xl font-bold text-gray-900">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
             {user?.first_name} {user?.last_name}
           </h2>
-          <p className="text-gray-400 text-sm mt-0.5">@{user?.username}</p>
+          <p className="text-gray-400 dark:text-gray-500 text-sm mt-0.5">@{user?.username}</p>
           <div className="flex items-center gap-2 mt-2 justify-center sm:justify-start">
             <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${ROLE_COLORS[user?.role ?? 'receptionist']}`}>
               <i className={`bi ${ROLE_ICONS[user?.role ?? 'receptionist']} text-[10px]`} />
               {user?.role === 'admin' ? 'Administrateur' : user?.role === 'manager' ? 'Manager' : 'Réceptionniste'}
             </span>
-            <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${user?.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+            <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium ${user?.is_active ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300' : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400'}`}>
               <i className={`bi ${user?.is_active ? 'bi-check-circle-fill' : 'bi-x-circle'} text-[10px]`} />
               {user?.is_active ? 'Actif' : 'Inactif'}
             </span>
@@ -175,20 +175,20 @@ export default function ProfilePage() {
 
         <div className="text-center sm:text-right shrink-0 space-y-2">
           <div>
-            <p className="text-xs text-gray-400 mb-1">Identifiant</p>
-            <p className="font-mono text-sm font-semibold text-gray-700 bg-gray-100 px-3 py-1.5 rounded-lg">{user?.username}</p>
-            <p className="text-xs text-gray-400 mt-1">Non modifiable</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Identifiant</p>
+            <p className="font-mono text-sm font-semibold text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 px-3 py-1.5 rounded-lg">{user?.username}</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Non modifiable</p>
           </div>
           <div className="flex flex-col gap-1">
             <button type="button" onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAvatar}
-              className="text-xs text-amber-600 hover:text-amber-700 font-medium flex items-center gap-1 justify-end disabled:opacity-40">
+              className="text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 font-medium flex items-center gap-1 justify-end disabled:opacity-40">
               <i className="bi bi-camera" /> Changer la photo
             </button>
             {user?.avatar && (
               <button type="button" onClick={handleRemoveAvatar}
                 disabled={uploadingAvatar}
-                className="text-xs text-red-400 hover:text-red-600 font-medium flex items-center gap-1 justify-end disabled:opacity-40">
+                className="text-xs text-red-400 dark:text-red-400 hover:text-red-600 dark:hover:text-red-300 font-medium flex items-center gap-1 justify-end disabled:opacity-40">
                 <i className="bi bi-trash" /> Supprimer la photo
               </button>
             )}
@@ -199,12 +199,12 @@ export default function ProfilePage() {
       {/* Edit profile */}
       <div className="card mb-4">
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center">
-            <i className="bi bi-person-gear text-blue-600 text-lg" />
+          <div className="w-9 h-9 rounded-xl bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+            <i className="bi bi-person-gear text-blue-600 dark:text-blue-400 text-lg" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">Informations personnelles</h3>
-            <p className="text-xs text-gray-400">Modifiez vos informations de contact</p>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Informations personnelles</h3>
+            <p className="text-xs text-gray-400 dark:text-gray-500">Modifiez vos informations de contact</p>
           </div>
         </div>
 
@@ -228,7 +228,7 @@ export default function ProfilePage() {
             </FormField>
           </div>
 
-          <div className="flex justify-end pt-2 border-t border-gray-100">
+          <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
             <button type="submit" disabled={savingProfile} className="btn-primary min-w-[140px] justify-center">
               {savingProfile
                 ? <><i className="bi bi-arrow-repeat animate-spin" /> Enregistrement…</>
@@ -241,12 +241,12 @@ export default function ProfilePage() {
       {/* Change password */}
       <div className="card">
         <div className="flex items-center gap-3 mb-5">
-          <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center">
-            <i className="bi bi-lock text-amber-600 text-lg" />
+          <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+            <i className="bi bi-lock text-amber-600 dark:text-amber-400 text-lg" />
           </div>
           <div>
-            <h3 className="font-semibold text-gray-900">Changer le mot de passe</h3>
-            <p className="text-xs text-gray-400">Minimum 8 caractères</p>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Changer le mot de passe</h3>
+            <p className="text-xs text-gray-400 dark:text-gray-500">Minimum 8 caractères</p>
           </div>
         </div>
 
@@ -269,7 +269,7 @@ export default function ProfilePage() {
             </FormField>
           </div>
 
-          <div className="flex justify-end pt-2 border-t border-gray-100">
+          <div className="flex justify-end pt-2 border-t border-gray-100 dark:border-gray-800">
             <button type="submit" disabled={savingPwd} className="btn-primary min-w-[160px] justify-center">
               {savingPwd
                 ? <><i className="bi bi-arrow-repeat animate-spin" /> Modification…</>

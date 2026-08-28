@@ -40,6 +40,7 @@ export interface CalendarRoom {
     check_out: string
     status: string
     nights: number
+    amenities: string[]
   }[]
 }
 
@@ -52,6 +53,8 @@ export interface CalendarData {
 export interface Notifications {
   arrivals: { id: number; reference: string; client: string; room: string; status: string }[]
   departures: { id: number; reference: string; client: string; room: string; status: string }[]
+  online_bookings: { id: number; reference: string; client: string; room: string; status: string }[]
+  online_services: { id: number; client: string; amenity: string; amenity_display: string; date: string; start_time: string }[]
   count: number
 }
 

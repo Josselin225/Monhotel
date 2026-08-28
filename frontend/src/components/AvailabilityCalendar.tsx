@@ -6,10 +6,10 @@ const MONTHS_FR = ['Janvier','Février','Mars','Avril','Mai','Juin',
 const DAYS_FR   = ['Lun','Mar','Mer','Jeu','Ven','Sam','Dim']
 
 function dayColor(d: CalendarDay): string {
-  if (d.past)            return 'bg-gray-100 text-gray-300 cursor-default'
-  if (d.available === 0) return 'bg-red-50 text-red-300 cursor-default'
-  if (d.available <= Math.ceil(d.total * 0.25)) return 'bg-amber-50 text-amber-600 hover:bg-amber-100 cursor-pointer'
-  return 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 cursor-pointer'
+  if (d.past)            return 'bg-white/5 text-white/20 cursor-default'
+  if (d.available === 0) return 'bg-red-950/40 text-red-400/70 cursor-default'
+  if (d.available <= Math.ceil(d.total * 0.25)) return 'bg-amber-900/30 text-amber-300 hover:bg-amber-900/50 cursor-pointer'
+  return 'bg-emerald-900/30 text-emerald-300 hover:bg-emerald-900/50 cursor-pointer'
 }
 
 function dot(d: CalendarDay): string {

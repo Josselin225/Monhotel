@@ -33,6 +33,8 @@ const RoomMapPage        = lazy(() => import('./pages/RoomMapPage'))
 const BusinessCardPage   = lazy(() => import('./pages/BusinessCardPage'))
 const InventoryPage      = lazy(() => import('./pages/InventoryPage'))
 const StaffSchedulePage  = lazy(() => import('./pages/StaffSchedulePage'))
+const AmenitiesPage      = lazy(() => import('./pages/AmenitiesPage'))
+const RfidCardsPage      = lazy(() => import('./pages/RfidCardsPage'))
 const PublicBookingPage  = lazy(() => import('./pages/PublicBookingPage'))
 const MyBookingPage      = lazy(() => import('./pages/MyBookingPage'))
 const GroupDashboardPage = lazy(() => import('./pages/GroupDashboardPage'))
@@ -97,18 +99,20 @@ function AppRoutes() {
         <Route path="clients" element={<ClientsPage />} />
         <Route path="billing" element={<BillingPage />} />
         <Route path="planning" element={<PlanningPage />} />
-        <Route path="content" element={<ContentPage />} />
+        <Route path="content" element={<ManagerRoute><ContentPage /></ManagerRoute>} />
         <Route path="crm" element={<CRMPage />} />
         <Route path="housekeeping" element={<HousekeepingPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="profile" element={<ProfilePage />} />
-        <Route path="pricing" element={<AdminRoute><PricingRulesPage /></AdminRoute>} />
-        <Route path="surveys" element={<SurveysPage />} />
+        <Route path="pricing" element={<ManagerRoute><PricingRulesPage /></ManagerRoute>} />
+        <Route path="surveys" element={<ManagerRoute><SurveysPage /></ManagerRoute>} />
         <Route path="accounting" element={<ManagerRoute><AccountingPage /></ManagerRoute>} />
         <Route path="maintenance" element={<MaintenancePage />} />
         <Route path="inventory" element={<InventoryPage />} />
         <Route path="schedule" element={<StaffSchedulePage />} />
-        <Route path="audit-log" element={<AdminRoute><AuditLogPage /></AdminRoute>} />
+        <Route path="services/:amenity" element={<AmenitiesPage />} />
+        <Route path="rfid" element={<RfidCardsPage />} />
+        <Route path="audit-log" element={<ManagerRoute><AuditLogPage /></ManagerRoute>} />
         <Route path="reports" element={<ManagerRoute><MonthlyReportPage /></ManagerRoute>} />
         <Route path="reports/full" element={<ManagerRoute><FullReportPage /></ManagerRoute>} />
         <Route path="daily-report" element={<DailyReportPage />} />

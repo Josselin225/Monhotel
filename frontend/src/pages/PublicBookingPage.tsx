@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { getContent } from '../api/content'
 
@@ -14,6 +14,23 @@ interface AvailableRoom {
   total_price: number
   nights: number
 }
+
+interface PublicMenuItem {
+  id: number
+  name: string
+  description: string
+  category: string
+  category_display: string
+  price: string
+}
+
+const MENU_CATEGORY_ORDER = ['starter', 'main', 'dessert', 'drink']
+
+const MEALS = [
+  { key: 'breakfast', label: 'Petit-déjeuner', time: '08:00' },
+  { key: 'lunch',     label: 'Déjeuner',       time: '12:30' },
+  { key: 'dinner',    label: 'Dîner',          time: '19:30' },
+] as const
 
 type Step = 'search' | 'form' | 'done'
 
@@ -36,7 +53,15 @@ export default function PublicBookingPage() {
   const [searching, setSearching] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [confirmation, setConfirmation] = useState<{ reference: string; total_price: number } | null>(null)
+  const [confirmation, setConfirmation] = useState<{ reference: string; total_price: number; restaurantReserved: boolean; restaurantOccasions: number } | null>(null)
+  const errorRef = useRef<HTMLDivElement>(null)
+
+  // Fait défiler vers l'erreur dès qu'elle apparaît : sur un formulaire long
+  // (mobile notamment), l'utilisateur reste scrollé sur le bouton de
+  // soumission et ne voit sinon ni l'erreur ni les champs à corriger.
+  useEffect(() => {
+    if (error) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [error])
 
   const [form, setForm] = useState({
     first_name: '', last_name: '', email: '', phone: '',
@@ -45,6 +70,22 @@ export default function PublicBookingPage() {
 
   const [hotelName, setHotelName] = useState('Mon Hôtel')
   const [logoUrl,   setLogoUrl]   = useState('')
+
+  const [menu, setMenu] = useState<PublicMenuItem[]>([])
+  const [wantsRestaurant, setWantsRestaurant] = useState(false)
+  const [restaurantForm, setRestaurantForm] = useState({
+    meals: [] as ('breakfast' | 'lunch' | 'dinner')[],
+    times: { breakfast: '08:00', lunch: '12:30', dinner: '19:30' } as Record<'breakfast' | 'lunch' | 'dinner', string>,
+    frequency: 'once' as 'once' | 'daily',
+    date: '', party_size: 2,
+  })
+
+  const toggleMeal = (key: 'breakfast' | 'lunch' | 'dinner') => {
+    setRestaurantForm(f => ({
+      ...f,
+      meals: f.meals.includes(key) ? f.meals.filter(m => m !== key) : [...f.meals, key],
+    }))
+  }
 
   useEffect(() => {
     getContent().then(c => {
@@ -58,6 +99,7 @@ export default function PublicBookingPage() {
         if (favicon) favicon.href = logo
       }
     }).catch(() => {})
+    api.get('/menu-items/public/').then(r => setMenu(r.data)).catch(() => {})
   }, [])
 
   async function handleSearch(e: React.FormEvent) {
@@ -78,6 +120,7 @@ export default function PublicBookingPage() {
 
   function selectRoom(room: AvailableRoom) {
     setSelectedRoom(room)
+    setRestaurantForm(f => ({ ...f, date: checkIn }))
     setStep('form')
     window.scrollTo(0, 0)
   }
@@ -85,6 +128,10 @@ export default function PublicBookingPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!selectedRoom) return
+    if (wantsRestaurant && restaurantForm.meals.length === 0) {
+      setError('Sélectionnez au moins un repas, ou décochez la réservation au restaurant.')
+      return
+    }
     setError('')
     setSubmitting(true)
     try {
@@ -93,8 +140,17 @@ export default function PublicBookingPage() {
         room_id: selectedRoom.id,
         check_in: checkIn,
         check_out: checkOut,
+        ...(wantsRestaurant && restaurantForm.meals.length > 0 ? {
+          restaurant_meals: restaurantForm.meals.map(m => ({ meal: m, time: restaurantForm.times[m] })),
+          restaurant_frequency: restaurantForm.frequency,
+          restaurant_party_size: restaurantForm.party_size,
+          ...(restaurantForm.frequency === 'once' ? { restaurant_date: restaurantForm.date } : {}),
+        } : {}),
       })
-      setConfirmation({ reference: data.reference, total_price: selectedRoom.total_price })
+      setConfirmation({
+        reference: data.reference, total_price: selectedRoom.total_price,
+        restaurantReserved: !!data.restaurant_reserved, restaurantOccasions: data.restaurant_occasions ?? 0,
+      })
       setStep('done')
       window.scrollTo(0, 0)
     } catch (err: any) {
@@ -147,6 +203,15 @@ export default function PublicBookingPage() {
                 <span className="text-gray-500">Total estimé</span>
                 <span className="font-bold">{fmt(confirmation.total_price)}</span>
               </div>
+              {confirmation.restaurantReserved && (
+                <p className="mt-3 pt-3 border-t border-amber-200 text-sm text-amber-700 flex items-center gap-2">
+                  <i className="bi bi-cup-hot" />
+                  {MEALS.filter(m => restaurantForm.meals.includes(m.key)).map(m => m.label).join(', ')} demandé{restaurantForm.meals.length > 1 ? 's' : ''}
+                  {restaurantForm.frequency === 'daily'
+                    ? ` chaque jour de votre séjour (${confirmation.restaurantOccasions} occasion${confirmation.restaurantOccasions > 1 ? 's' : ''})`
+                    : ` le ${new Date(restaurantForm.date + 'T00:00').toLocaleDateString('fr-FR')}`}.
+                </p>
+              )}
             </div>
             <button
               onClick={() => { setStep('search'); setRooms([]); setCheckIn(''); setCheckOut(''); setSelectedRoom(null) }}
@@ -194,7 +259,7 @@ export default function PublicBookingPage() {
               <form onSubmit={handleSubmit} className="md:col-span-2 space-y-4">
                 <h2 className="text-xl font-bold text-gray-800">Vos coordonnées</h2>
                 {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">{error}</div>
+                  <div ref={errorRef} className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3 scroll-mt-24">{error}</div>
                 )}
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
@@ -235,6 +300,113 @@ export default function PublicBookingPage() {
                     onChange={e => setForm({ ...form, special_requests: e.target.value })}
                     placeholder="Lit bébé, vue sur jardin, chambre calme…" />
                 </div>
+
+                {/* Réservation restaurant optionnelle */}
+                <div className="border border-amber-200 rounded-xl p-4 bg-amber-50/40">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={wantsRestaurant} onChange={e => setWantsRestaurant(e.target.checked)}
+                      className="w-4 h-4 accent-amber-600" />
+                    <span className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                      <i className="bi bi-cup-hot text-amber-600" /> Réserver une table au restaurant
+                    </span>
+                  </label>
+
+                  {wantsRestaurant && (
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Repas (un ou plusieurs)</label>
+                        <div className="grid grid-cols-3 gap-2">
+                          {MEALS.map(m => (
+                            <button key={m.key} type="button"
+                              onClick={() => toggleMeal(m.key)}
+                              className={`text-center rounded-lg border px-2 py-2.5 text-xs font-medium transition-all flex items-center justify-center gap-1.5 ${
+                                restaurantForm.meals.includes(m.key)
+                                  ? 'border-amber-500 bg-amber-100 text-amber-700'
+                                  : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                              }`}>
+                              {restaurantForm.meals.includes(m.key) && <i className="bi bi-check-lg text-[10px]" />}
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {restaurantForm.meals.length > 0 && (
+                        <div className="space-y-2">
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Heure de chaque repas</label>
+                          {MEALS.filter(m => restaurantForm.meals.includes(m.key)).map(m => (
+                            <div key={m.key} className="flex items-center gap-3">
+                              <span className="text-xs text-gray-500 w-28 shrink-0">{m.label}</span>
+                              <input type="time" className="input-box flex-1" value={restaurantForm.times[m.key]}
+                                onChange={e => setRestaurantForm({ ...restaurantForm, times: { ...restaurantForm.times, [m.key]: e.target.value } })} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Fréquence</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button type="button" onClick={() => setRestaurantForm({ ...restaurantForm, frequency: 'daily' })}
+                            className={`text-left rounded-lg border px-3 py-2.5 text-xs font-medium transition-all ${
+                              restaurantForm.frequency === 'daily'
+                                ? 'border-amber-500 bg-amber-100 text-amber-700'
+                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                            }`}>
+                            Chaque jour de mon séjour
+                            {nights > 0 && <span className="block text-gray-400 font-normal mt-0.5">{nights} occasion{nights > 1 ? 's' : ''}</span>}
+                          </button>
+                          <button type="button" onClick={() => setRestaurantForm({ ...restaurantForm, frequency: 'once' })}
+                            className={`text-left rounded-lg border px-3 py-2.5 text-xs font-medium transition-all ${
+                              restaurantForm.frequency === 'once'
+                                ? 'border-amber-500 bg-amber-100 text-amber-700'
+                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                            }`}>
+                            Une seule fois
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className={`grid ${restaurantForm.frequency === 'once' ? 'sm:grid-cols-2' : ''} gap-4`}>
+                        {restaurantForm.frequency === 'once' && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
+                            <input type="date" className="input-box w-full" value={restaurantForm.date} min={checkIn} max={checkOut}
+                              onChange={e => setRestaurantForm({ ...restaurantForm, date: e.target.value })} />
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Personnes</label>
+                          <input type="number" min={1} max={20} className="input-box w-full" value={restaurantForm.party_size}
+                            onChange={e => setRestaurantForm({ ...restaurantForm, party_size: Number(e.target.value) })} />
+                        </div>
+                      </div>
+
+                      {menu.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Menu du jour</p>
+                          <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                            {MENU_CATEGORY_ORDER.filter(cat => menu.some(m => m.category === cat)).map(cat => (
+                              <div key={cat}>
+                                <p className="text-xs font-medium text-amber-600 mb-1">{menu.find(m => m.category === cat)?.category_display}</p>
+                                {menu.filter(m => m.category === cat).map(item => (
+                                  <div key={item.id} className="flex justify-between items-start text-sm py-1 border-b border-amber-100 last:border-0">
+                                    <div>
+                                      <p className="text-gray-800">{item.name}</p>
+                                      {item.description && <p className="text-xs text-gray-400">{item.description}</p>}
+                                    </div>
+                                    <span className="text-gray-600 font-medium shrink-0 ml-3">{fmt(Number(item.price))}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <button type="submit" disabled={submitting}
                   className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-xl transition-colors disabled:opacity-60">
                   {submitting ? 'Envoi en cours…' : 'Envoyer ma demande de réservation'}
@@ -282,7 +454,7 @@ export default function PublicBookingPage() {
                 </button>
               </div>
               {error && (
-                <p className="mt-3 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>
+                <div ref={errorRef} className="mt-3 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2 scroll-mt-24">{error}</div>
               )}
             </form>
 

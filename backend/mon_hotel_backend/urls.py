@@ -1,3 +1,4 @@
+from decouple import config
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -6,10 +7,16 @@ from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from mon_hotel_backend.cookie_views import CookieLoginView, CookieRefreshView, CookieLogoutView
 
+# Chemin de l'admin Django configurable (ADMIN_URL_PATH) : en production, on évite
+# le chemin par défaut `/admin/`, seule protection étant sinon le mot de passe d'un
+# compte superutilisateur — un chemin imprévisible bloque le scan automatisé.
+ADMIN_URL_PATH = config('ADMIN_URL_PATH', default='admin/')
+if not ADMIN_URL_PATH.endswith('/'):
+    ADMIN_URL_PATH += '/'
 
 urlpatterns = [
     path('', RedirectView.as_view(url='/api/docs/', permanent=False)),
-    path('admin/', admin.site.urls),
+    path(ADMIN_URL_PATH, admin.site.urls),
     # Auth JWT (cookie-based)
     path('api/auth/login/', CookieLoginView.as_view(), name='token_obtain_pair'),
     path('api/auth/refresh/', CookieRefreshView.as_view(), name='token_refresh'),
@@ -31,6 +38,8 @@ urlpatterns = [
     path('api/', include('apps.tracking.urls')),
     path('api/', include('apps.inventory.urls')),
     path('api/', include('apps.scheduling.urls')),
+    path('api/', include('apps.rfid.urls')),
+    path('api/', include('apps.amenities.urls')),
     # API Docs
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),

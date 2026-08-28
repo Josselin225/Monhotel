@@ -33,6 +33,17 @@ class HotelSerializer(serializers.ModelSerializer):
         return float(total or 0)
 
 
+class HotelSelfServiceSerializer(serializers.ModelSerializer):
+    """Auto-service (PATCH /hotels/me/) : un admin d'hôtel ne peut modifier que les
+    coordonnées de son établissement. plan / is_active / trial_ends_at sont réservés
+    au superadmin plateforme (HotelDetailView) — sinon un hôtel suspendu pourrait se
+    réactiver lui-même, ou s'auto-attribuer un plan payant gratuitement."""
+
+    class Meta:
+        model = Hotel
+        fields = ['name', 'email', 'phone', 'city', 'country']
+
+
 class HotelCreateSerializer(serializers.ModelSerializer):
     """Utilisé lors de l'onboarding (création d'un hôtel + admin)."""
     admin_username = serializers.CharField(write_only=True)
@@ -41,7 +52,11 @@ class HotelCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model  = Hotel
-        fields = ['name', 'email', 'phone', 'city', 'country', 'plan',
+        # `plan` est volontairement absent : un hôtel qui s'auto-inscrit ne doit
+        # pas pouvoir se placer directement sur un plan payant (mass assignment).
+        # Il démarre toujours sur `Hotel.Plan.BASIC` (valeur par défaut du modèle) ;
+        # le changement de plan est réservé au superadmin plateforme.
+        fields = ['name', 'email', 'phone', 'city', 'country',
                   'admin_username', 'admin_password', 'admin_email']
 
     def validate_admin_password(self, value):

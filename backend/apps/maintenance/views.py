@@ -7,6 +7,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 from .models import MaintenanceTicket, Technician
 from .serializers import MaintenanceTicketSerializer, TechnicianSerializer
+from apps.accounts.permissions import IsAdminOrManager
 from apps.tenants.mixins import HotelScopeMixin
 
 
@@ -20,7 +21,7 @@ class TechnicianViewSet(HotelScopeMixin, viewsets.ModelViewSet):
     ordering = ['name']
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().annotate(tickets_count=Count('tickets'))
         active = self.request.query_params.get('active')
         if active == 'true':
             qs = qs.filter(is_active=True)
@@ -40,8 +41,22 @@ class MaintenanceTicketViewSet(HotelScopeMixin, viewsets.ModelViewSet):
     ordering_fields = ['created_at', 'updated_at', 'priority', 'status']
     ordering = ['-created_at']
 
+    def get_permissions(self):
+        if self.action == 'destroy':
+            return [IsAdminOrManager()]
+        return [IsAuthenticated()]
+
+    def _validate_related(self, serializer):
+        self.check_related_hotel(serializer.validated_data.get('room'), 'room')
+        self.check_related_hotel(serializer.validated_data.get('technician'), 'technician')
+
     def perform_create(self, serializer):
+        self._validate_related(serializer)
         serializer.save(reported_by=self.request.user, hotel=self.get_hotel())
+
+    def perform_update(self, serializer):
+        self._validate_related(serializer)
+        serializer.save()
 
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None):

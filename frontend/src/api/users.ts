@@ -18,11 +18,6 @@ export const usersApi = {
     return Array.isArray(data) ? data : data.results
   },
 
-  create: async (payload: UserPayload & { password: string }): Promise<User> => {
-    const { data } = await api.post('/users/', payload)
-    return data
-  },
-
   update: async (id: number, payload: Partial<UserPayload>): Promise<User> => {
     const { data } = await api.patch(`/users/${id}/`, payload)
     return data

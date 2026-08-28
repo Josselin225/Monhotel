@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from apps.accounts.permissions import IsAdmin, IsAdminOrManager
+from mon_hotel_backend.csv_utils import sanitize_csv_cell
 from .models import AuditEntry
 from .serializers import AuditEntrySerializer
 
@@ -53,15 +54,19 @@ class AuditEntryViewSet(viewsets.ReadOnlyModelViewSet):
         for e in qs:
             username = (e.user.get_full_name() or e.user.email or e.user.username) if e.user else 'Système'
             details = '; '.join(f"{k}: {v[0]!r} → {v[1]!r}" for k, v in e.changes.items()) if isinstance(e.changes, dict) else ''
+            # Les valeurs ci-dessous (object_repr, details/description) peuvent contenir
+            # des champs saisis par un visiteur public (ex: nom via la réservation en
+            # ligne) — on les passe par sanitize_csv_cell pour bloquer toute injection
+            # de formule Excel/LibreOffice à l'ouverture de l'export.
             writer.writerow([
                 e.created_at.strftime('%d/%m/%Y %H:%M:%S'),
-                username,
+                sanitize_csv_cell(username),
                 e.get_action_display(),
                 e.model_name,
-                e.object_repr,
+                sanitize_csv_cell(e.object_repr),
                 e.object_id,
                 e.ip_address or '',
-                details or e.description,
+                sanitize_csv_cell(details or e.description),
             ])
         return response
 

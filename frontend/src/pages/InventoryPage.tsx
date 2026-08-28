@@ -18,10 +18,10 @@ const UNITS = [
   { value: 'pack',  label: 'Paquet' },
 ]
 const MOVEMENT_TYPES = [
-  { value: 'in',         label: 'Entrée (achat/réassort)', icon: 'bi-box-arrow-in-down', color: 'text-green-600' },
-  { value: 'out',        label: 'Sortie (consommation)',   icon: 'bi-box-arrow-up',      color: 'text-orange-600' },
-  { value: 'adjustment', label: 'Ajustement (inventaire)', icon: 'bi-sliders',           color: 'text-blue-600' },
-  { value: 'loss',       label: 'Perte / casse',           icon: 'bi-exclamation-triangle', color: 'text-red-600' },
+  { value: 'in',         label: 'Entrée (achat/réassort)', icon: 'bi-box-arrow-in-down', color: 'text-green-600 dark:text-green-400' },
+  { value: 'out',        label: 'Sortie (consommation)',   icon: 'bi-box-arrow-up',      color: 'text-orange-600 dark:text-orange-400' },
+  { value: 'adjustment', label: 'Ajustement (inventaire)', icon: 'bi-sliders',           color: 'text-blue-600 dark:text-blue-400' },
+  { value: 'loss',       label: 'Perte / casse',           icon: 'bi-exclamation-triangle', color: 'text-red-600 dark:text-red-400' },
 ]
 const CATEGORY_ICON_CHOICES = [
   'bi-cup-straw', 'bi-bag', 'bi-box-seam', 'bi-droplet', 'bi-basket', 'bi-lightbulb',
@@ -179,7 +179,7 @@ export default function InventoryPage() {
     <div className="p-4">
       <PageHeader>
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <p className="text-sm text-gray-700 font-medium">Minibar, linge, fournitures et produits d'entretien</p>
+          <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">Minibar, linge, fournitures et produits d'entretien</p>
           <div className="flex gap-2">
             <button className="btn-secondary flex items-center gap-2" onClick={() => openMovement()}>
               <i className="bi bi-arrow-left-right" /> Nouveau mouvement
@@ -196,28 +196,28 @@ export default function InventoryPage() {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         <div className="card flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center"><i className="bi bi-box-seam text-blue-600" /></div>
-          <div><p className="text-xs text-gray-400">Articles suivis</p><p className="text-lg font-bold text-gray-900">{stats.total_items}</p></div>
+          <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center"><i className="bi bi-box-seam text-blue-600 dark:text-blue-400" /></div>
+          <div><p className="text-xs text-gray-400 dark:text-gray-500">Articles suivis</p><p className="text-lg font-bold text-gray-900 dark:text-gray-100">{stats.total_items}</p></div>
         </div>
         <div className="card flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${stats.low_stock_count > 0 ? 'bg-red-100' : 'bg-gray-100'}`}>
-            <i className={`bi bi-exclamation-triangle ${stats.low_stock_count > 0 ? 'text-red-600' : 'text-gray-400'}`} />
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${stats.low_stock_count > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-gray-100 dark:bg-gray-800'}`}>
+            <i className={`bi bi-exclamation-triangle ${stats.low_stock_count > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`} />
           </div>
-          <div><p className="text-xs text-gray-400">Sous le seuil d'alerte</p><p className="text-lg font-bold text-gray-900">{stats.low_stock_count}</p></div>
+          <div><p className="text-xs text-gray-400 dark:text-gray-500">Sous le seuil d'alerte</p><p className="text-lg font-bold text-gray-900 dark:text-gray-100">{stats.low_stock_count}</p></div>
         </div>
         <div className="card flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center"><i className="bi bi-cash-stack text-emerald-600" /></div>
-          <div><p className="text-xs text-gray-400">Valeur du stock</p><p className="text-lg font-bold text-gray-900">{formatFcfa(stats.total_value)}</p></div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center"><i className="bi bi-cash-stack text-emerald-600 dark:text-emerald-400" /></div>
+          <div><p className="text-xs text-gray-400 dark:text-gray-500">Valeur du stock</p><p className="text-lg font-bold text-gray-900 dark:text-gray-100">{formatFcfa(stats.total_value)}</p></div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-gray-100">
+      <div className="flex gap-1 mb-4 border-b border-gray-100 dark:border-gray-800">
         {(['items', 'movements'] as const).map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === t ? 'border-hotel-gold text-hotel-gold' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === t ? 'border-hotel-gold text-hotel-gold' : 'border-transparent text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300'}`}
           >
             {t === 'items' ? 'Articles' : 'Mouvements'}
           </button>
@@ -241,7 +241,7 @@ export default function InventoryPage() {
         <SkeletonTablePage cardCount={0} rows={8} cols={4} withToolbar={false} />
       ) : tab === 'items' ? (
         items.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">
+          <div className="text-center py-20 text-gray-400 dark:text-gray-500">
             <i className="bi bi-box-seam text-4xl" />
             <p className="mt-2 font-medium">Aucun article en stock</p>
           </div>
@@ -250,37 +250,37 @@ export default function InventoryPage() {
             <div className="space-y-2">
               {items.map(it => (
                 <div key={it.id} className={`card flex items-center gap-4 ${!it.is_active ? 'opacity-50' : ''}`}>
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${it.is_low_stock ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'}`}>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${it.is_low_stock ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'}`}>
                     <i className={`bi ${it.category_icon ?? 'bi-box'} text-lg`} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-semibold text-gray-900 text-sm">{it.name}</p>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">{it.category_name ?? '—'}</span>
+                      <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{it.name}</p>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">{it.category_name ?? '—'}</span>
                       {it.is_low_stock && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">Stock bas</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400 font-medium">Stock bas</span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                       Seuil d'alerte : {it.reorder_threshold} {it.unit_display} · Coût unitaire : {formatFcfa(Number(it.unit_cost))}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className={`text-lg font-bold ${it.is_low_stock ? 'text-red-600' : 'text-gray-900'}`}>{it.quantity_on_hand}</p>
-                    <p className="text-xs text-gray-400">{it.unit_display}</p>
+                    <p className={`text-lg font-bold ${it.is_low_stock ? 'text-red-600 dark:text-red-400' : 'text-gray-900 dark:text-gray-100'}`}>{it.quantity_on_hand}</p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500">{it.unit_display}</p>
                   </div>
                   <div className="flex items-center gap-1 shrink-0">
-                    <button className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-hotel-gold transition-colors"
+                    <button className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-hotel-gold transition-colors"
                       title="Enregistrer un mouvement" onClick={() => openMovement(it)}>
                       <i className="bi bi-arrow-left-right" />
                     </button>
                     {isManager && (
                       <>
-                        <button className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                        <button className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
                           onClick={() => openEditItem(it)}>
                           <i className="bi bi-pencil" />
                         </button>
-                        <button className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                        <button className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                           onClick={() => handleDeleteItem(it)}>
                           <i className="bi bi-trash" />
                         </button>
@@ -295,7 +295,7 @@ export default function InventoryPage() {
         )
       ) : (
         movements.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">
+          <div className="text-center py-20 text-gray-400 dark:text-gray-500">
             <i className="bi bi-arrow-left-right text-4xl" />
             <p className="mt-2 font-medium">Aucun mouvement enregistré</p>
           </div>
@@ -306,12 +306,12 @@ export default function InventoryPage() {
                 const mt = MOVEMENT_TYPES.find(t => t.value === mv.movement_type)
                 return (
                   <div key={mv.id} className="card flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 ${mt?.color ?? ''}`}>
+                    <div className={`w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center shrink-0 ${mt?.color ?? ''}`}>
                       <i className={`bi ${mt?.icon ?? 'bi-arrow-left-right'} text-lg`} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-gray-900 text-sm">{mv.item_name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
+                      <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{mv.item_name ?? 'Article supprimé'}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                         {mt?.label} {mv.room_number && `· Chambre ${mv.room_number}`} {mv.reason && `· ${mv.reason}`}
                         {mv.created_by_name && ` · par ${mv.created_by_name}`}
                       </p>
@@ -331,8 +331,8 @@ export default function InventoryPage() {
       {/* Modal article */}
       {showItemModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-5">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg p-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-5">
               {editingItem ? "Modifier l'article" : 'Nouvel article'}
             </h3>
             <form onSubmit={handleSaveItem} className="space-y-4">
@@ -348,7 +348,7 @@ export default function InventoryPage() {
                     </select>
                     <button type="button" title="Nouvelle catégorie"
                       onClick={() => setShowCategoryModal(true)}
-                      className="shrink-0 w-9 rounded-lg border border-gray-200 text-gray-400 hover:text-hotel-gold hover:border-hotel-gold transition-colors flex items-center justify-center">
+                      className="shrink-0 w-9 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:text-hotel-gold hover:border-hotel-gold transition-colors flex items-center justify-center">
                       <i className="bi bi-plus-lg" />
                     </button>
                   </div>
@@ -386,8 +386,8 @@ export default function InventoryPage() {
       {/* Modal mouvement */}
       {showMoveModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-5">Nouveau mouvement de stock</h3>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-lg p-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-5">Nouveau mouvement de stock</h3>
             <form onSubmit={handleSaveMovement} className="space-y-4">
               <FormField label="Article" icon="bi-box-seam" required>
                 <select value={moveForm.item} onChange={e => setMoveForm(f => ({ ...f, item: e.target.value }))} required>
@@ -429,8 +429,8 @@ export default function InventoryPage() {
       {/* Modal nouvelle catégorie */}
       {showCategoryModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-5">Nouvelle catégorie</h3>
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-5">Nouvelle catégorie</h3>
             <form onSubmit={handleSaveCategory} className="space-y-4">
               <FormField label="Nom" icon="bi-tag" required>
                 <input value={categoryForm.name} onChange={e => setCategoryForm(f => ({ ...f, name: e.target.value }))}
@@ -441,7 +441,7 @@ export default function InventoryPage() {
                 <div className="flex flex-wrap gap-2 mt-1">
                   {CATEGORY_ICON_CHOICES.map(icon => (
                     <button key={icon} type="button" onClick={() => setCategoryForm(f => ({ ...f, icon }))}
-                      className={`w-9 h-9 rounded-lg border flex items-center justify-center transition-colors ${categoryForm.icon === icon ? 'border-hotel-gold bg-amber-50 text-hotel-gold' : 'border-gray-200 text-gray-400 hover:border-gray-300'}`}>
+                      className={`w-9 h-9 rounded-lg border flex items-center justify-center transition-colors ${categoryForm.icon === icon ? 'border-hotel-gold bg-amber-50 dark:bg-amber-900/20 text-hotel-gold' : 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500 hover:border-gray-300 dark:hover:border-gray-600'}`}>
                       <i className={`bi ${icon}`} />
                     </button>
                   ))}

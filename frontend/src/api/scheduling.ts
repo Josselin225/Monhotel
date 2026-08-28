@@ -1,9 +1,24 @@
 import api from './client'
 
+export interface Employee {
+  id: number
+  name: string
+  position: string
+  position_display: string
+  phone: string
+  email: string
+  notes: string
+  is_active: boolean
+  user: number | null
+  user_username: string | null
+  shifts_count: number
+  created_at: string
+}
+
 export interface Shift {
   id: number
-  user: number
-  user_name: string
+  employee: number
+  employee_name: string
   date: string
   start_time: string
   end_time: string
@@ -16,8 +31,8 @@ export interface Shift {
 }
 
 export interface ShiftSummary {
-  user: number
-  user_name: string
+  employee: number
+  employee_name: string
   hours: number
 }
 
@@ -30,6 +45,38 @@ export const POSITIONS = [
   { value: 'security',     label: 'Sécurité' },
   { value: 'other',        label: 'Autre' },
 ]
+
+export interface CreateAccountPayload {
+  username: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  role: string
+  password: string
+}
+
+export const employeeApi = {
+  list: async (params?: Record<string, string>): Promise<Employee[]> => {
+    const { data } = await api.get('/employees/', { params: { ...params, page_size: '500' } })
+    return data.results ?? data
+  },
+  create: async (payload: Partial<Employee>): Promise<Employee> => {
+    const { data } = await api.post('/employees/', payload)
+    return data
+  },
+  update: async (id: number, payload: Partial<Employee>): Promise<Employee> => {
+    const { data } = await api.patch(`/employees/${id}/`, payload)
+    return data
+  },
+  delete: async (id: number): Promise<void> => {
+    await api.delete(`/employees/${id}/`)
+  },
+  createAccount: async (id: number, payload: CreateAccountPayload): Promise<Employee> => {
+    const { data } = await api.post(`/employees/${id}/create_account/`, payload)
+    return data
+  },
+}
 
 export const schedulingApi = {
   list: async (params: Record<string, string> = {}): Promise<Shift[]> => {

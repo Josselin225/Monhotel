@@ -95,17 +95,67 @@ export default function NotificationBell() {
       {open && (
         <div className="absolute right-0 top-11 w-80 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 z-50 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-            <h4 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">Notifications du jour</h4>
+            <h4 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">Notifications</h4>
             <span className="text-xs text-gray-400">{new Date().toLocaleDateString('fr-FR')}</span>
           </div>
 
           {count === 0 ? (
             <div className="px-4 py-8 text-center text-gray-400 text-sm">
               <i className="bi bi-check-circle text-3xl mb-2 block text-green-400" />
-              Aucune arrivée ni départ aujourd'hui
+              Rien à signaler aujourd'hui
             </div>
           ) : (
             <div className="max-h-72 overflow-y-auto">
+              {(data?.online_bookings.length ?? 0) > 0 && (
+                <div>
+                  <p className="px-4 py-2 text-xs font-medium text-gray-500 bg-gray-50 uppercase tracking-wider">
+                    <i className="bi bi-globe mr-1" />Réservations en ligne ({data?.online_bookings.length})
+                  </p>
+                  {data?.online_bookings.map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => { navigate('/app/bookings'); setOpen(false) }}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-indigo-50 transition-colors text-left border-b border-gray-50"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-700 flex-shrink-0">
+                        {b.client[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{b.client}</p>
+                        <p className="text-xs text-gray-400">Chambre #{b.room} · {b.reference}</p>
+                      </div>
+                      <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">En attente</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {(data?.online_services.length ?? 0) > 0 && (
+                <div>
+                  <p className="px-4 py-2 text-xs font-medium text-gray-500 bg-gray-50 uppercase tracking-wider">
+                    <i className="bi bi-cup-hot mr-1" />Réservations de service ({data?.online_services.length})
+                  </p>
+                  {data?.online_services.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => { navigate(`/app/services/${s.amenity}`); setOpen(false) }}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-purple-50 transition-colors text-left border-b border-gray-50"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-sm font-bold text-purple-700 flex-shrink-0">
+                        {s.client[0]}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{s.client}</p>
+                        <p className="text-xs text-gray-400">
+                          {s.amenity_display} · {new Date(s.date + 'T00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} à {s.start_time.slice(0, 5)}
+                        </p>
+                      </div>
+                      <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">En attente</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {(data?.arrivals.length ?? 0) > 0 && (
                 <div>
                   <p className="px-4 py-2 text-xs font-medium text-gray-500 bg-gray-50 uppercase tracking-wider">

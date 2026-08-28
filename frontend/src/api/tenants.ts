@@ -28,7 +28,7 @@ export const PLAN_LABELS: Record<string, string> = {
 export const tenantsApi = {
   listHotels: async (): Promise<Hotel[]> => {
     const { data } = await api.get<PaginatedResponse<Hotel>>('/hotels/', { params: { page_size: '200' } })
-    return data.results
+    return data.results ?? data
   },
   updateHotel: async (id: number, payload: Partial<Hotel>) => {
     const { data } = await api.patch<Hotel>(`/hotels/${id}/`, payload)

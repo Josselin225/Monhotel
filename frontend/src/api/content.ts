@@ -19,6 +19,7 @@ export interface ServiceItem {
   icon: string; title: string; desc: string; image: string
 }
 export interface GalleryItem { image: string; label: string }
+export interface VideoContent { url: string; title: string }
 export interface Testimonial { author: string; role: string; text: string }
 export interface CtaContent { title: string; subtitle: string; button_text: string }
 export interface FooterContent {
@@ -36,6 +37,7 @@ export interface SiteContent {
   rooms: RoomItem[]
   services: ServiceItem[]
   gallery: GalleryItem[]
+  video: VideoContent
   testimonials: Testimonial[]
   cta: CtaContent
   footer: FooterContent
@@ -66,3 +68,14 @@ export const uploadLogo = (file: File): Promise<string> => {
 
 export const removeLogo = (): Promise<void> =>
   api.delete('/content/logo/')
+
+export const uploadContentVideo = (file: File): Promise<string> => {
+  const form = new FormData()
+  form.append('video', file)
+  return api.post('/content/video/', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then((r: { data: { video_url: string } }) => r.data.video_url)
+}
+
+export const removeContentVideo = (): Promise<void> =>
+  api.delete('/content/video/')

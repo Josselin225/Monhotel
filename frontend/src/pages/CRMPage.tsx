@@ -1,11 +1,37 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { clientsApi } from '../api/clients'
 import { Client, ClientNote, CRMStats } from '../types'
 import { getApiError, formatFcfa, formatDate } from '../utils'
+import { useAuth } from '../context/AuthContext'
 import PageHeader from '../components/PageHeader'
 import { useDebounce } from '../hooks/useDebounce'
 import { SkeletonTableRow } from '../components/Skeleton'
+
+// ── Réglages d'affichage de la page (par utilisateur, mémorisés localement) ────
+
+interface CrmDisplaySettings {
+  topClientsLimit: number
+  birthdaysLimit: number
+  birthdaysDays: number
+  pageSize: number
+}
+const CRM_SETTINGS_DEFAULTS: CrmDisplaySettings = {
+  topClientsLimit: 10,
+  birthdaysLimit: 5,
+  birthdaysDays: 30,
+  pageSize: 20,
+}
+function crmSettingsKey(username: string) {
+  return `mh_crm_settings_${username}`
+}
+function loadCrmSettings(username: string): CrmDisplaySettings {
+  try {
+    return { ...CRM_SETTINGS_DEFAULTS, ...JSON.parse(localStorage.getItem(crmSettingsKey(username)) ?? '{}') }
+  } catch {
+    return CRM_SETTINGS_DEFAULTS
+  }
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -304,6 +330,7 @@ function periodToParams(period: string, dateFrom: string, dateTo: string): Recor
 }
 
 export default function CRMPage() {
+  const { user } = useAuth()
   const [clients, setClients]       = useState<Client[]>([])
   const [stats, setStats]           = useState<CRMStats | null>(null)
   const [loading, setLoading]       = useState(true)
@@ -316,22 +343,46 @@ export default function CRMPage() {
   const [selected, setSelected]     = useState<Client | null>(null)
   const [page, setPage]             = useState(1)
   const [totalCount, setTotalCount] = useState(0)
-  const PAGE_SIZE = 20
+
+  const [displaySettings, setDisplaySettings] = useState<CrmDisplaySettings>(() => loadCrmSettings(user?.username ?? 'guest'))
+  const [showSettings, setShowSettings] = useState(false)
+  const settingsRef = useRef<HTMLDivElement>(null)
+  const PAGE_SIZE = displaySettings.pageSize
+
+  const saveDisplaySettings = (next: CrmDisplaySettings) => {
+    setDisplaySettings(next)
+    localStorage.setItem(crmSettingsKey(user?.username ?? 'guest'), JSON.stringify(next))
+    setPage(1)
+  }
+
+  useEffect(() => {
+    if (!showSettings) return
+    const handler = (e: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) setShowSettings(false)
+    }
+    window.addEventListener('mousedown', handler)
+    return () => window.removeEventListener('mousedown', handler)
+  }, [showSettings])
 
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-      const params: Record<string, string> = { page: String(page) }
+      const params: Record<string, string> = { page: String(page), page_size: String(displaySettings.pageSize) }
       if (debouncedSearch) params.search     = debouncedSearch
       if (vipFilter)       params.vip_status = vipFilter
       Object.assign(params, periodToParams(period, dateFrom, dateTo))
-      const [res, st] = await Promise.all([clientsApi.list(params), clientsApi.stats()])
+      const statsParams = {
+        top_limit: String(displaySettings.topClientsLimit),
+        birthdays_limit: String(displaySettings.birthdaysLimit),
+        birthdays_days: String(displaySettings.birthdaysDays),
+      }
+      const [res, st] = await Promise.all([clientsApi.list(params), clientsApi.stats(statsParams)])
       setClients(res.results)
       setTotalCount(res.count)
       setStats(st)
     } catch (err) { toast.error(getApiError(err))
     } finally { setLoading(false) }
-  }, [debouncedSearch, vipFilter, period, dateFrom, dateTo, page])
+  }, [debouncedSearch, vipFilter, period, dateFrom, dateTo, page, displaySettings])
 
   useEffect(() => { loadAll() }, [loadAll])
 
@@ -347,6 +398,66 @@ export default function CRMPage() {
       <PageHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-700 font-medium">{totalCount} client{totalCount > 1 ? 's' : ''} au total</p>
+          <div ref={settingsRef} className="relative">
+            <button
+              onClick={() => setShowSettings(o => !o)}
+              className="flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
+              title="Paramètres d'affichage"
+            >
+              <i className="bi bi-sliders" /> Paramètres
+            </button>
+            {showSettings && (
+              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-xl shadow-xl border border-gray-100 z-50 p-4 space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Affichage</p>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Clients dans le Top</label>
+                  <select
+                    value={displaySettings.topClientsLimit}
+                    onChange={e => saveDisplaySettings({ ...displaySettings, topClientsLimit: Number(e.target.value) })}
+                    className="w-full text-sm px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg"
+                  >
+                    {[5, 10, 15, 20, 25].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Anniversaires affichés</label>
+                  <select
+                    value={displaySettings.birthdaysLimit}
+                    onChange={e => saveDisplaySettings({ ...displaySettings, birthdaysLimit: Number(e.target.value) })}
+                    className="w-full text-sm px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg"
+                  >
+                    {[5, 10, 15, 20].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Fenêtre anniversaires</label>
+                  <select
+                    value={displaySettings.birthdaysDays}
+                    onChange={e => saveDisplaySettings({ ...displaySettings, birthdaysDays: Number(e.target.value) })}
+                    className="w-full text-sm px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg"
+                  >
+                    {[7, 14, 30, 60, 90].map(n => <option key={n} value={n}>{n} jours</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Résultats par page (tableau)</label>
+                  <select
+                    value={displaySettings.pageSize}
+                    onChange={e => saveDisplaySettings({ ...displaySettings, pageSize: Number(e.target.value) })}
+                    className="w-full text-sm px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-lg"
+                  >
+                    {[10, 20, 50, 100].map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+                <button
+                  onClick={() => saveDisplaySettings(CRM_SETTINGS_DEFAULTS)}
+                  className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+                >
+                  <i className="bi bi-arrow-counterclockwise" /> Réinitialiser
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </PageHeader>
 

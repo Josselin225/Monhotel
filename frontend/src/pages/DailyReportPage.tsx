@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 import { SkeletonTablePage } from '../components/Skeleton'
 import { bookingsApi, DailyBooking } from '../api/bookings'
-import { formatFcfa } from '../utils'
+import { formatFcfa, getApiError } from '../utils'
 
 interface DailyReport {
   date: string
@@ -80,6 +81,7 @@ export default function DailyReportPage() {
     setLoading(true)
     bookingsApi.dailyReport(date)
       .then(setReport)
+      .catch(err => toast.error(getApiError(err)))
       .finally(() => setLoading(false))
   }, [date])
 

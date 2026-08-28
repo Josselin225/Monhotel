@@ -12,6 +12,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from mon_hotel_backend.throttles import LoginRateThrottle
 from apps.accounts.serializers import UserSerializer
 from apps.accounts import twofactor
+from apps.accounts.models import User
 
 # Verrouillage par compte (en plus du throttling par IP) : bloque un compte
 # précis après plusieurs échecs, quelle que soit l'IP d'origine (protège
@@ -21,13 +22,16 @@ LOGIN_FAILURE_WINDOW = 15 * 60   # fenêtre de comptage des échecs (secondes)
 LOGIN_LOCKOUT_DURATION = 15 * 60  # durée du verrouillage (secondes)
 
 
-def _cookie_kwargs(max_age: int) -> dict:
+REFRESH_COOKIE_PATH = '/api/auth/'
+
+
+def _cookie_kwargs(max_age: int, path: str = '/') -> dict:
     return dict(
         httponly=True,
         secure=not settings.DEBUG,
         samesite='Strict',
         max_age=max_age,
-        path='/',
+        path=path,
     )
 
 
@@ -119,7 +123,7 @@ class CookieLoginView(TokenObtainPairView):
 
         response = Response(UserSerializer(user).data)
         response.set_cookie('access_token',  access,  **_cookie_kwargs(15 * 60))
-        response.set_cookie('refresh_token', refresh, **_cookie_kwargs(3 * 24 * 3600))
+        response.set_cookie('refresh_token', refresh, **_cookie_kwargs(3 * 24 * 3600, path=REFRESH_COOKIE_PATH))
         return response
 
 
@@ -132,13 +136,31 @@ class CookieRefreshView(APIView):
         if not raw:
             return Response({'detail': 'Non authentifié.'}, status=401)
 
+        # Vérifie le statut de l'hôtel avant tout rafraîchissement (donc avant
+        # rotation/blacklist du token) : un hôtel suspendu après la connexion
+        # ne doit pas pouvoir continuer à travailler en renouvelant sa session
+        # indéfiniment — même contrôle qu'à la connexion, voir CookieLoginView.
+        try:
+            user_id = RefreshToken(raw).get('user_id')
+            user = User.objects.select_related('hotel').filter(pk=user_id).first()
+        except TokenError:
+            user = None
+        if user and user.hotel_id and not user.hotel.is_active:
+            response = Response(
+                {'detail': "Ce compte hôtel est suspendu. Contactez le support pour plus d'informations."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+            response.delete_cookie('access_token')
+            response.delete_cookie('refresh_token', path=REFRESH_COOKIE_PATH)
+            return response
+
         serializer = TokenRefreshSerializer(data={'refresh': raw})
         try:
             serializer.is_valid(raise_exception=True)
         except TokenError:
             response = Response({'detail': 'Session expirée, veuillez vous reconnecter.'}, status=401)
             response.delete_cookie('access_token')
-            response.delete_cookie('refresh_token')
+            response.delete_cookie('refresh_token', path=REFRESH_COOKIE_PATH)
             return response
 
         access      = serializer.validated_data['access']
@@ -147,7 +169,7 @@ class CookieRefreshView(APIView):
         response = Response({'detail': 'Token rafraîchi.'})
         response.set_cookie('access_token', access, **_cookie_kwargs(15 * 60))
         if new_refresh:
-            response.set_cookie('refresh_token', new_refresh, **_cookie_kwargs(3 * 24 * 3600))
+            response.set_cookie('refresh_token', new_refresh, **_cookie_kwargs(3 * 24 * 3600, path=REFRESH_COOKIE_PATH))
         return response
 
 
@@ -175,5 +197,5 @@ class CookieLogoutView(APIView):
 
         response = Response({'detail': 'Déconnexion réussie.'})
         response.delete_cookie('access_token')
-        response.delete_cookie('refresh_token')
+        response.delete_cookie('refresh_token', path=REFRESH_COOKIE_PATH)
         return response
